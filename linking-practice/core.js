@@ -13,7 +13,7 @@ const store = {
 };
 
 const Settings = {
-  defaults: { speed: 0.9, voice: "", newPerDay: 8, reactSec: 8, apiKey: "", model: "claude-sonnet-5-5", keepAudio: true },
+  defaults: { speed: 0.9, voice: "", newPerDay: 8, reactSec: 8, apiKey: "", model: "claude-sonnet-5-5", keepAudio: true, reviewMode: "listen", focus: [] },
   get(k){ const s = store.get("settings", {}); return k in s ? s[k] : this.defaults[k]; },
   set(k, v){ const s = store.get("settings", {}); s[k] = v; store.set("settings", s); }
 };
@@ -87,14 +87,30 @@ const SRS = {
     const s = this.all(), out = [];
     const room = Math.max(0, limit - this.newIntroducedToday());
     if(!room) return out;
-    const maxLen = Math.max(...SCENES.map(x => x.items.length));
-    for(let i = 0; i < maxLen && out.length < room; i++)
-      for(const sc of SCENES){
-        const id = `${sc.key}-${i}`;
-        if(i < sc.items.length && !s[id]) out.push(id);
-        if(out.length >= room) break;
-      }
+    const focus = Settings.get("focus").filter(k => SCENE_BY_KEY[k]);
+    const rounds = list => {
+      const maxLen = Math.max(...list.map(x => x.items.length));
+      for(let i = 0; i < maxLen && out.length < room; i++)
+        for(const sc of list){
+          const id = `${sc.key}-${i}`;
+          if(i < sc.items.length && !s[id] && !out.includes(id)) out.push(id);
+          if(out.length >= room) break;
+        }
+    };
+    if(focus.length) rounds(focus.map(k => SCENE_BY_KEY[k]));
+    if(out.length < room) rounds(SCENES);
     return out;
+  },
+  forecast(days){
+    const s = this.all(), out = new Array(days).fill(0);
+    Object.values(s).forEach(c => {
+      for(let d = 1; d <= days; d++){ if(c.due > startOfDay(d - 1) && c.due <= startOfDay(d)){ out[d - 1]++; break; } }
+    });
+    return out;
+  },
+  sceneProgress(key){
+    const s = this.all(), sc = SCENE_BY_KEY[key];
+    return sc.items.filter((_, i) => s[`${key}-${i}`] && s[`${key}-${i}`].reps > 0).length;
   },
   learnedCount(){ return Object.values(this.all()).filter(c => c.reps > 0).length; },
   /* grade: 0 没听懂 1 有点难 2 听懂了 3 太简单 */
@@ -144,7 +160,7 @@ const Speech = {
     document.dispatchEvent(new Event("voiceschanged"));
   },
   voice(){ return this.voices.find(v => v.name === Settings.get("voice")) || this.voices[0] || null; },
-  say(text, rate){
+  say(text, rate, alt){
     const my = ++this.token;
     rate = rate || Settings.get("speed");
     const words = String(text).split(/\s+/).length;
@@ -157,7 +173,9 @@ const Speech = {
         speechSynthesis.cancel();
         const u = new SpeechSynthesisUtterance(text);
         u.lang = "en-US";
-        const v = this.voice(); if(v) u.voice = v;
+        let v = this.voice();
+        if(alt && this.voices.length > 1){ const others = this.voices.filter(x => x !== v && this.score(x) > -50); if(others.length) v = others[0]; }
+        if(v) u.voice = v;
         u.rate = rate;
         u.onend = finish; u.onerror = finish;
         setTimeout(() => { if(my === this.token) speechSynthesis.speak(u); else finish(); }, 60);

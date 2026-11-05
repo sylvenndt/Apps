@@ -33,10 +33,10 @@ function renderEn(chunks){
 }
 
 /* 播放按钮：说话时有波纹 */
-async function playWith(btn, text, rate){
+async function playWith(btn, text, rate, alt){
   $$(".play.speaking").forEach(b => b.classList.remove("speaking"));
   btn && btn.classList.add("speaking");
-  const ok = await Speech.say(text, rate);
+  const ok = await Speech.say(text, rate, alt);
   btn && btn.classList.remove("speaking");
   return ok;
 }
@@ -82,12 +82,23 @@ Views.today = {
         <div class="stat"><b>${Log.activeDays()}</b><span>练习天数</span></div>
         <div class="stat"><b>${ALL_ITEMS.length + Cards.user().length}</b><span>句库总数</span></div>
       </div>
+      <a class="lib-link" href="#library">
+        <div class="grow"><div class="t">句库</div><div class="small muted">${ALL_ITEMS.length} 句，${SCENES.length} 个场景，可以挑重点场景先学</div></div>
+        <span class="small muted">明天复习 ${SRS.forecast(1)[0]} 句</span>
+      </a>
       <p class="small muted" style="margin-top:18px">每天按顺序走完这四站：先复习巩固，再练听力反应，然后开口表达，最后打磨发音。</p>`;
   }
 };
 
 /* ================= 复习 ================= */
-const Review = { queue: null, day: null, idx: 0, done: 0, revealed: false };
+const Review = { queue: null, day: null, idx: 0, done: 0, revealed: false, said: null };
+const REVIEW_MODES = [["listen", "听音理解"], ["speak", "看中文说英文"], ["mix", "混合"]];
+function reviewType(id){
+  const card = Cards.get(id), mode = Settings.get("reviewMode");
+  if(!card || !card.zh) return "listen";
+  if(mode === "mix"){ let h = 0; for(const ch of id + dayKey()) h = (h * 31 + ch.charCodeAt(0)) | 0; return Math.abs(h) % 2 ? "speak" : "listen"; }
+  return mode;
+}
 Views.review = {
   show(){
     if(!Review.queue || Review.day !== dayKey() || Review.idx >= Review.queue.length){
@@ -96,77 +107,122 @@ Views.review = {
     }
     this.render();
   },
+  header(left){
+    return `
+      <div class="row between" style="margin-bottom:12px">
+        <div class="row"><a class="icon-btn" href="#today" aria-label="返回">${ICON.back}</a><h2 style="margin:0">复习</h2></div>
+        ${left !== undefined ? `<span class="small muted">还剩 ${left} 句</span>` : ""}
+      </div>
+      <div class="chips" id="rv-modes">${REVIEW_MODES.map(([k, n]) => `<button class="chip${Settings.get("reviewMode") === k ? " on" : ""}" data-m="${k}">${n}</button>`).join("")}</div>`;
+  },
+  bindModes(){
+    $$("#rv-modes .chip").forEach(b => b.onclick = () => { Settings.set("reviewMode", b.dataset.m); this.render(); });
+  },
   render(){
     const v = $("#v-review");
+    Speech.stop(); stopActiveListen();
     const id = Review.queue[Review.idx];
     const card = id && Cards.get(id);
     if(!card){
-      v.innerHTML = `
-        <div class="row" style="margin-bottom:18px"><a class="icon-btn" href="#today" aria-label="返回">${ICON.back}</a><h2 style="margin:0">复习</h2></div>
+      const fc = SRS.forecast(7);
+      v.innerHTML = `${this.header()}
         <div class="empty">
           <div class="big">今天的复习完成了</div>
-          <p class="muted">${Review.done ? `这一轮复习了 ${Review.done} 次。` : ""}明天会自动安排新的到期句子。</p>
-          <div class="row" style="justify-content:center;margin-top:20px;gap:10px">
-            <a class="btn line" style="--c:var(--orange)" href="#listen">去练听力</a>
-            <a class="btn ghost" href="#today">回到今日</a>
+          <p class="muted">${Review.done ? `这一轮复习了 ${Review.done} 次。` : ""}明天有 ${fc[0]} 句到期，未来 7 天共 ${fc.reduce((a, b) => a + b, 0)} 句。</p>
+          <div class="stack" style="margin-top:22px">
+            <a class="btn line block" style="--c:var(--orange)" href="#listen" data-act="hf-learned">用随身听再磨一遍耳朵</a>
+            <a class="btn ghost block" href="#library">去句库挑更多句子</a>
           </div>
         </div>`;
+      this.bindModes();
       return;
     }
-    Review.revealed = false;
+    Review.revealed = false; Review.said = null;
+    const type = reviewType(id);
     const isNew = !SRS.all()[id];
     const sc = SCENE_BY_KEY[card.scene];
-    const left = Review.queue.length - Review.idx;
-    v.innerHTML = `
-      <div class="row between" style="margin-bottom:6px">
-        <div class="row"><a class="icon-btn" href="#today" aria-label="返回">${ICON.back}</a><h2 style="margin:0">复习</h2></div>
-        <span class="small muted">还剩 ${left} 句</span>
-      </div>
-      <div class="panel" style="margin-top:14px">
-        <div class="row">${bulletHTML(card.scene)}<span class="small muted">${sc ? esc(sc.name) : "我的句子"}${isNew ? "，新句" : ""}</span></div>
+    const front = type === "listen" ? `
         <button class="play" id="rv-play" style="--c:var(--blue)" aria-label="播放">${ICON.play}</button>
         <p class="small muted" style="text-align:center" id="rv-tip">只听，别翻译。试着直接想到画面，或者想好怎么回应。</p>
-        <div class="row" style="justify-content:center;gap:8px;margin-top:12px">
+        <div class="row" style="justify-content:center;gap:8px;margin-top:12px" id="rv-tools">
           <button class="chip" id="rv-slow">慢速</button>
           <button class="chip" id="rv-chunks">按意群播放</button>
           <button class="chip" id="rv-reveal">显示英文</button>
-        </div>
+        </div>` : `
+        <p class="zh-big">${esc(card.zh)}</p>
+        <p class="small muted" style="text-align:center" id="rv-tip">用英语把这句说出来。想不起来就先说个大概。</p>
+        <div class="row" style="justify-content:center;margin-top:14px"><button class="mic lg" id="rv-say" style="--c:var(--blue)" aria-label="开始说">${ICON.mic}</button></div>
+        <p id="rv-said" style="text-align:center;font-weight:600;min-height:24px;margin-top:10px"></p>
+        <div class="row" style="justify-content:center"><button class="chip" id="rv-reveal">看答案</button></div>`;
+    v.innerHTML = `${this.header(Review.queue.length - Review.idx)}
+      <div class="panel" style="margin-top:14px">
+        <div class="row">${bulletHTML(card.scene)}<span class="small muted">${sc ? esc(sc.name) : "我的句子"}${isNew ? "，新句" : ""}</span></div>
+        ${front}
         <div id="rv-text" hidden style="margin-top:18px">
+          ${type === "speak" ? `<div class="row" style="margin-bottom:10px"><button class="play sm" id="rv-play" style="--c:var(--blue)" aria-label="播放">${ICON.play}</button><button class="chip" id="rv-slow">慢速</button><button class="chip" id="rv-chunks">按意群</button></div>` : ""}
           <div class="en">${renderEn(card.chunks)}</div>
-          <p class="zh blur" id="rv-zh" style="margin-top:6px" title="点一下显示中文">${esc(card.zh || "（没有中文）")}</p>
+          ${type === "listen" ? `<p class="zh blur" id="rv-zh" style="margin-top:6px" title="点一下显示中文">${esc(card.zh || "（没有中文）")}</p>` : `<p class="small" id="rv-cmp" style="margin-top:6px"></p>`}
           ${card.reply ? `<div class="row" style="margin-top:14px;align-items:flex-start">
             <button class="play sm" id="rv-reply" style="--c:var(--ink)" aria-label="播放回应">${ICON.play}</button>
             <div><div class="small muted">对方可能这样回</div><div style="font-weight:600">${esc(card.reply)}</div></div></div>` : ""}
-          <div class="row" style="margin-top:14px">
+          ${type === "listen" ? `<div class="row" style="margin-top:14px">
             <button class="btn soft sm" id="rv-shadow">${ICON.mic}<span>跟读</span></button>
-            <span class="small muted grow" id="rv-shadow-res"></span>
-          </div>
+            <span class="small muted grow" id="rv-shadow-res"></span></div>` : ""}
         </div>
       </div>
       <div id="rv-grades" style="margin-top:16px" hidden>
-        <p class="small muted" style="margin-bottom:8px">刚才只听的时候，你听懂了吗？</p>
+        <p class="small muted" style="margin-bottom:8px">${type === "listen" ? "刚才只听的时候，你听懂了吗？" : "你刚才说得出来吗？"}</p>
         <div class="grades">
-          ${["没听懂", "有点难", "听懂了", "太简单"].map((g, k) => {
+          ${(type === "listen" ? ["没听懂", "有点难", "听懂了", "太简单"] : ["说不出", "说得磕绊", "说对了", "张口就来"]).map((g, k) => {
             const days = SRS.preview(id, k);
             return `<button class="grade g${k}" data-g="${k}"><b>${g}</b><span>${days ? days + " 天后" : "马上再来"}</span></button>`;
           }).join("")}
         </div>
       </div>`;
-    const play = $("#rv-play");
-    play.onclick = () => playWith(play, card.en);
-    $("#rv-slow").onclick = () => playWith(play, card.en, Math.max(0.5, Settings.get("speed") - 0.3));
-    $("#rv-chunks").onclick = async () => { play.classList.add("speaking"); await Speech.chunks(card.chunks, Math.max(0.6, Settings.get("speed") - 0.1)); play.classList.remove("speaking"); };
-    $("#rv-reveal").onclick = () => this.reveal();
-    $("#rv-zh").onclick = e => e.currentTarget.classList.toggle("show");
-    const rp = $("#rv-reply"); if(rp) rp.onclick = () => playWith(rp, card.reply);
-    $("#rv-shadow").onclick = () => this.shadow(card);
+    this.bindModes();
+    const play = () => $("#rv-play");
+    const bindAudio = () => {
+      $("#rv-play").onclick = () => playWith(play(), card.en);
+      $("#rv-slow").onclick = () => playWith(play(), card.en, Math.max(0.5, Settings.get("speed") - 0.3));
+      $("#rv-chunks").onclick = async () => { play().classList.add("speaking"); await Speech.chunks(card.chunks, Math.max(0.6, Settings.get("speed") - 0.1)); play() && play().classList.remove("speaking"); };
+    };
+    bindAudio();
+    $("#rv-reveal").onclick = () => this.reveal(card, type);
+    const zh = $("#rv-zh"); if(zh) zh.onclick = e => e.currentTarget.classList.toggle("show");
+    const rp = $("#rv-reply"); if(rp) rp.onclick = () => playWith(rp, card.reply, null, true);
+    const sh = $("#rv-shadow"); if(sh) sh.onclick = () => this.shadow(card);
+    const say = $("#rv-say"); if(say) say.onclick = () => this.sayIt(card);
     $$("#rv-grades .grade").forEach(b => b.onclick = () => this.grade(id, +b.dataset.g));
-    setTimeout(() => { if(location.hash === "#review") playWith(play, card.en); }, 250);
+    if(type === "listen") setTimeout(() => { if(location.hash === "#review" && $("#rv-play") === play()) playWith(play(), card.en); }, 250);
   },
-  reveal(){
+  reveal(card, type){
+    stopActiveListen();
     Review.revealed = true;
     $("#rv-text").hidden = false; $("#rv-grades").hidden = false;
     $("#rv-reveal").remove(); $("#rv-tip").hidden = true;
+    if(type === "speak"){
+      const cmp = $("#rv-cmp");
+      if(Review.said){
+        const tgt = normalize(card.en), got = normalize(Review.said);
+        const pct = Math.round(100 * lcsLen(tgt, got) / Math.max(tgt.length, got.length, 1));
+        cmp.innerHTML = `和答案的重合度 <b class="${pct >= 80 ? "ok" : pct >= 50 ? "mid" : "no"}">${pct}%</b>。意思对、说法不同也没关系，记住地道的版本。`;
+      } else cmp.innerHTML = `<span class="muted">先听两遍，再跟着说一遍。</span>`;
+      playWith($("#rv-play"), card.en);
+    }
+  },
+  async sayIt(card){
+    const btn = $("#rv-say"), out = $("#rv-said");
+    if(activeListen){ stopActiveListen(); return; }
+    Speech.stop();
+    btn.classList.add("on"); btn.innerHTML = ICON.stop;
+    out.textContent = "请说…";
+    activeListen = startListening({ target: card.en, onText: t => out.textContent = t });
+    const r = await activeListen.done; activeListen = null;
+    if(!$("#rv-say")) return;
+    btn.classList.remove("on"); btn.innerHTML = ICON.mic;
+    if(!r.text){ out.textContent = srErrorText(r.error); return; }
+    Review.said = r.text; out.textContent = "“" + r.text + "”";
+    if(!Review.revealed) this.reveal(card, "speak");
   },
   async shadow(card){
     const btn = $("#rv-shadow"), res = $("#rv-shadow-res");
@@ -176,6 +232,7 @@ Views.review = {
     res.textContent = "请跟读…";
     activeListen = startListening({ target: card.en, onText: t => res.textContent = t });
     const r = await activeListen.done; activeListen = null;
+    if(!$("#rv-shadow")) return;
     btn.innerHTML = `${ICON.mic}<span>跟读</span>`;
     if(!r.text){ res.textContent = srErrorText(r.error); return; }
     const tgt = normalize(card.en), got = normalize(r.text);
@@ -192,20 +249,118 @@ Views.review = {
   }
 };
 
+/* ================= 句库 ================= */
+const Lib = { open: null };
+Views.library = {
+  show(){
+    const focus = Settings.get("focus");
+    const s = SRS.all();
+    $("#v-library").innerHTML = `
+      <div class="row" style="margin-bottom:14px"><a class="icon-btn" href="#today" aria-label="返回">${ICON.back}</a><h2 style="margin:0">句库</h2></div>
+      <p class="muted" style="margin-bottom:6px">${ALL_ITEMS.length} 句美国人日常口语，分 ${SCENES.length} 个场景。点 ☆ 设为重点场景，每天的新句会优先从重点场景里出。</p>
+      ${CATS.map(c => `
+        <h3>${esc(c.name)}</h3>
+        <div class="panel" style="padding:2px 16px">
+          ${c.scenes.map(k => {
+            const sc = SCENE_BY_KEY[k], prog = SRS.sceneProgress(k), on = focus.includes(k);
+            return `
+            <div class="scene-row">
+              <button class="scene-head" data-open="${k}">${bulletHTML(k)}
+                <div class="grow"><div class="t">${esc(sc.name)}</div><div class="small muted">${esc(sc.en)}，已学 ${prog}/${sc.items.length}</div></div>
+                <span class="bar"><i style="width:${prog / sc.items.length * 100}%;background:${sc.color}"></i></span>
+              </button>
+              <button class="star${on ? " on" : ""}" data-focus="${k}" aria-label="设为重点">${on ? "★" : "☆"}</button>
+            </div>
+            ${Lib.open === k ? `<div class="scene-items">
+              ${ALL_ITEMS.filter(x => x.scene === k).map(it => `
+                <div class="li">
+                  <button class="play sm" data-p="${it.id}" style="--c:${sc.color}" aria-label="播放">${ICON.play}</button>
+                  <div class="grow"><div style="font-weight:600">${esc(it.en)}</div><div class="small muted">${esc(it.zh)}</div></div>
+                  ${s[it.id] ? `<span class="small muted">复习中</span>` : `<button class="chip" data-add="${it.id}">学这句</button>`}
+                </div>`).join("")}
+              <div class="row" style="gap:8px;padding:10px 0 14px">
+                <button class="btn sm line" style="--c:${sc.color}" data-addall="${k}">整个场景加入今天的复习</button>
+                <a class="btn sm ghost" href="#listen" data-act="listen-scene" data-scene="${k}">练这个场景的听力</a>
+              </div>
+            </div>` : ""}`;
+          }).join("")}
+        </div>`).join("")}`;
+    $$("#v-library [data-open]").forEach(b => b.onclick = () => { Lib.open = Lib.open === b.dataset.open ? null : b.dataset.open; const y = window.scrollY; this.show(); window.scrollTo(0, y); });
+    $$("#v-library [data-focus]").forEach(b => b.onclick = () => {
+      const k = b.dataset.focus; let f = Settings.get("focus").filter(x => x !== k);
+      if(!Settings.get("focus").includes(k)) f.push(k);
+      Settings.set("focus", f); Review.queue = null; const y = window.scrollY; this.show(); window.scrollTo(0, y);
+      toast(f.includes(k) ? "已设为重点场景" : "已取消重点");
+    });
+    $$("#v-library [data-p]").forEach(b => b.onclick = () => playWith(b, Cards.get(b.dataset.p).en));
+    $$("#v-library [data-add]").forEach(b => b.onclick = () => { SRS.schedule(b.dataset.add, Date.now()); Review.queue = null; b.outerHTML = `<span class="small muted">复习中</span>`; toast("已加入今天的复习"); });
+    $$("#v-library [data-addall]").forEach(b => b.onclick = () => {
+      const k = b.dataset.addall; ALL_ITEMS.filter(x => x.scene === k).forEach(x => { if(!SRS.all()[x.id]) SRS.schedule(x.id, Date.now()); });
+      Review.queue = null; toast("已加入今天的复习"); const y = window.scrollY; this.show(); window.scrollTo(0, y);
+    });
+  }
+};
+
 /* ================= 听力直通 ================= */
-const Listen = { state: "setup", scene: "all", qs: [], i: 0, results: [], timer: null, t0: 0, answered: false };
+const Listen = { state: "setup", scene: "all", qs: [], i: 0, results: [], timer: null, t0: 0, answered: false,
+  hf: { list: [], i: 0, playing: false, token: 0, reps: 2, reply: true, showText: true, lock: null } };
+
+function listenPool(sel){
+  if(sel === "learned") return Object.keys(SRS.all()).map(id => Cards.get(id)).filter(Boolean);
+  if(sel.startsWith("cat:")){ const c = CATS.find(x => "cat:" + x.key === sel); return ALL_ITEMS.filter(x => c && c.scenes.includes(x.scene)); }
+  if(sel === "all") return ALL_ITEMS;
+  return ALL_ITEMS.filter(x => x.scene === sel);
+}
+function poolLabel(sel){
+  if(sel === "all") return "全部场景";
+  if(sel === "learned") return "我学过的";
+  if(sel.startsWith("cat:")) return (CATS.find(x => "cat:" + x.key === sel) || {}).name || "";
+  return (SCENE_BY_KEY[sel] || {}).name || "";
+}
+
+/* 把句子里的一个小词换掉，做成“听准细节”的干扰项 */
+function detailVariants(en){
+  const toks = en.split(" "), cands = new Map();
+  toks.forEach((t, i) => {
+    const m = t.match(/^([^A-Za-z'’]*)([A-Za-z'’]+)([^A-Za-z'’]*)$/); if(!m) return;
+    const low = m[2].toLowerCase().replace(/’/g, "'");
+    const g = CONFUSE.find(g => g.includes(low)); if(!g) return;
+    g.filter(x => x !== low).forEach(alt => {
+      let w = alt;
+      if(alt.startsWith("i'")) w = "I" + alt.slice(1);
+      else if(/^[A-Z]/.test(m[2])) w = alt[0].toUpperCase() + alt.slice(1);
+      if(alt === "a" && toks[i + 1] && /^[aeiou]/i.test(toks[i + 1])) w = /^[A-Z]/.test(m[2]) ? "An" : "an";
+      const t2 = [...toks]; t2[i] = m[1] + w + m[3];
+      const s = t2.join(" ");
+      if(s !== en) cands.set(s, i);
+    });
+  });
+  const picks = shuffle([...cands.keys()]).slice(0, 3);
+  return picks.length >= 2 ? picks : null;
+}
+
 Views.listen = {
-  show(){ if(Listen.state === "q") this.renderQ(); else if(Listen.state === "done") this.renderDone(); else this.renderSetup(); },
+  show(){
+    if(Listen.state === "q") this.renderQ();
+    else if(Listen.state === "done") this.renderDone();
+    else if(Listen.state === "hf") this.renderHF();
+    else this.renderSetup();
+  },
   renderSetup(){
     Listen.state = "setup";
-    const rs = Settings.get("reactSec");
+    const rs = Settings.get("reactSec"), sel = Listen.scene;
+    const learnedN = Object.keys(SRS.all()).length;
     $("#v-listen").innerHTML = `
       <h1>听力直通</h1>
-      <p class="muted" style="margin:8px 0 20px">只放声音，选项全是英文，听完要马上选。没有时间翻译，大脑只能直接抓意思，练多了就能“听到即懂”。</p>
-      <h3>场景</h3>
-      <div class="chips" id="ls-scenes">
-        <button class="chip${Listen.scene === "all" ? " on" : ""}" data-s="all">全部混合</button>
-        ${SCENES.map(s => `<button class="chip${Listen.scene === s.key ? " on" : ""}" data-s="${s.key}"><i class="mini-bullet" style="--c:${s.color}"></i>${esc(s.name)}</button>`).join("")}
+      <p class="muted" style="margin:8px 0 18px">只放声音，选项全是英文，听完马上选。没有时间翻译，大脑只能直接抓意思。还会专门考你连读里最容易漏掉的小词。</p>
+      <h3>练哪些场景</h3>
+      <div class="chips" id="ls-cats">
+        <button class="chip${sel === "all" ? " on" : ""}" data-s="all">全部</button>
+        ${CATS.map(c => `<button class="chip${sel === "cat:" + c.key ? " on" : ""}" data-s="cat:${c.key}">${esc(c.name)}</button>`).join("")}
+        ${learnedN ? `<button class="chip${sel === "learned" ? " on" : ""}" data-s="learned">我学过的（${learnedN}）</button>` : ""}
+      </div>
+      <div class="chips" id="ls-scenes" style="margin-top:8px">
+        ${SCENES.map(s => `<button class="chip${sel === s.key ? " on" : ""}" data-s="${s.key}"><i class="mini-bullet" style="--c:${s.color}"></i>${esc(s.name)}</button>`).join("")}
       </div>
       <h3>反应时间</h3>
       <div class="chips" id="ls-react">
@@ -213,28 +368,42 @@ Views.listen = {
       </div>
       <h3>语速</h3>
       <div class="speed"><input type="range" id="ls-speed" min="0.5" max="1.4" step="0.05" value="${Settings.get("speed")}" aria-label="语速"><b id="ls-speed-v">${Settings.get("speed").toFixed(2)}×</b></div>
-      <button class="btn line block" style="--c:var(--orange);margin-top:26px;padding:15px" id="ls-start">开始 10 题</button>
-      <p class="small muted" style="margin-top:12px">答错或超时的句子会自动加入复习。</p>`;
-    $$("#ls-scenes .chip").forEach(b => b.onclick = () => { Listen.scene = b.dataset.s; $$("#ls-scenes .chip").forEach(x => x.classList.toggle("on", x === b)); });
+      <p class="small muted" style="margin-top:4px">想适应美国人的正常语速，熟练后调到 1× 以上。</p>
+      <button class="btn line block" style="--c:var(--orange);margin-top:22px;padding:15px" id="ls-start">开始 10 题</button>
+      <button class="hf-card" id="ls-hf">
+        <div class="grow"><div class="t">随身听</div><div class="small muted">自动连播所选场景的对话，一句一句磨耳朵。适合通勤、做家务时听。</div></div>
+        <span class="play sm" style="--c:var(--ink)">${ICON.play}</span>
+      </button>
+      <p class="small muted" style="margin-top:12px">题型有三种：听完选怎么回应、听准句子里的小词、判断在哪个场景。答错或超时的句子会自动加入复习。</p>`;
+    $$("#ls-cats .chip, #ls-scenes .chip").forEach(b => b.onclick = () => { Listen.scene = b.dataset.s; $$("#ls-cats .chip, #ls-scenes .chip").forEach(x => x.classList.toggle("on", x === b)); });
     $$("#ls-react .chip").forEach(b => b.onclick = () => { Settings.set("reactSec", +b.dataset.r); $$("#ls-react .chip").forEach(x => x.classList.toggle("on", x === b)); });
     $("#ls-speed").oninput = e => { Settings.set("speed", +e.target.value); $("#ls-speed-v").textContent = (+e.target.value).toFixed(2) + "×"; };
     $("#ls-start").onclick = () => this.start();
+    $("#ls-hf").onclick = () => this.startHF();
   },
   start(){
-    const pool = Listen.scene === "all" ? ALL_ITEMS : ALL_ITEMS.filter(x => x.scene === Listen.scene);
+    const pool = listenPool(Listen.scene);
+    if(!pool.length){ toast("这里还没有句子"); return; }
+    const multi = new Set(pool.map(x => x.scene)).size > 1;
     const picks = shuffle(pool).slice(0, 10);
-    Listen.qs = picks.map((it, k) => {
-      const type = (k % 5 === 2 || k % 5 === 4) && Listen.scene === "all" ? "scene" : "reply";
-      let opts;
+    Listen.qs = picks.map(it => {
+      const types = [];
+      if(it.reply) types.push(["reply", 45]);
+      const dv = detailVariants(it.en);
+      if(dv) types.push(["detail", 35]);
+      if(multi && SCENE_BY_KEY[it.scene]) types.push(["scene", 20]);
+      if(!types.length) return null;
+      let r = Math.random() * types.reduce((a, t) => a + t[1], 0), type = types[0][0];
+      for(const [t, w] of types){ if((r -= w) <= 0){ type = t; break; } }
       if(type === "reply"){
         const others = shuffle(ALL_ITEMS.filter(x => x.scene !== it.scene)).slice(0, 3).map(x => x.reply);
-        opts = shuffle([it.reply, ...others]);
-        return { it, type, opts, ans: it.reply };
+        return { it, type, opts: shuffle([it.reply, ...others]), ans: it.reply };
       }
+      if(type === "detail") return { it, type, opts: shuffle([it.en, ...dv]), ans: it.en };
       const others = shuffle(SCENES.filter(s => s.key !== it.scene)).slice(0, 3).map(s => s.en);
-      opts = shuffle([SCENE_BY_KEY[it.scene].en, ...others]);
-      return { it, type, opts, ans: SCENE_BY_KEY[it.scene].en };
-    });
+      return { it, type, opts: shuffle([SCENE_BY_KEY[it.scene].en, ...others]), ans: SCENE_BY_KEY[it.scene].en };
+    }).filter(Boolean);
+    if(!Listen.qs.length){ toast("这些句子还出不了题，换个场景试试"); return; }
     Listen.i = 0; Listen.results = []; Listen.state = "q";
     this.renderQ();
   },
@@ -243,17 +412,17 @@ Views.listen = {
     if(!q){ this.finish(); return; }
     Listen.answered = false; Listen.t0 = 0;
     clearInterval(Listen.timer);
-    const v = $("#v-listen");
-    v.innerHTML = `
+    const prompt = { reply: "对方这样说，你会怎么回？", detail: "你听到的是哪一句？注意小词", scene: "这句话最可能在哪里听到？" }[q.type];
+    $("#v-listen").innerHTML = `
       <div class="row between">
         <button class="icon-btn" id="ls-quit" aria-label="退出">${ICON.x}</button>
         <span class="small muted">${Listen.i + 1} / ${Listen.qs.length}</span>
       </div>
       <div class="progress" style="margin-top:14px">${Listen.qs.map((_, k) => `<i class="${k < Listen.results.length ? (Listen.results[k].ok ? "ok" : "no") : k === Listen.i ? "cur" : ""}"></i>`).join("")}</div>
-      <p style="text-align:center;font-weight:700">${q.type === "reply" ? "对方这样说，你会怎么回？" : "这句话最可能在哪里听到？"}</p>
+      <p style="text-align:center;font-weight:700">${prompt}</p>
       <button class="play" id="ls-play" style="--c:var(--orange)" aria-label="播放">${ICON.play}</button>
       <div class="timer"><i id="ls-timer"></i></div>
-      <div class="opts" id="ls-opts">${q.opts.map((o, k) => `<button class="opt" data-k="${k}">${esc(o)}</button>`).join("")}</div>
+      <div class="opts${q.type === "detail" ? " detail" : ""}" id="ls-opts">${q.opts.map((o, k) => `<button class="opt" data-k="${k}">${esc(o)}</button>`).join("")}</div>
       <div id="ls-fb" style="margin-top:16px"></div>`;
     $("#ls-quit").onclick = () => { clearInterval(Listen.timer); Speech.stop(); this.renderSetup(); };
     const play = $("#ls-play");
@@ -262,11 +431,11 @@ Views.listen = {
     (async () => {
       await sleep(300);
       const ok = await playWith(play, q.it.en);
-      if(ok && !Listen.answered && Listen.state === "q") this.startTimer();
+      if(ok && !Listen.answered && Listen.state === "q" && Listen.qs[Listen.i] === q) this.startTimer();
     })();
   },
   startTimer(){
-    const total = Settings.get("reactSec") * 1000, bar = $("#ls-timer");
+    const total = Settings.get("reactSec") * 1000 * (Listen.qs[Listen.i].type === "detail" ? 1.4 : 1), bar = $("#ls-timer");
     Listen.t0 = performance.now();
     clearInterval(Listen.timer);
     Listen.timer = setInterval(() => {
@@ -286,11 +455,17 @@ Views.listen = {
     if(!ok) SRS.schedule(q.it.id, Date.now());
     $$("#ls-opts .opt").forEach((b, j) => { b.disabled = true; if(q.opts[j] === q.ans) b.classList.add("ok"); else if(j === k) b.classList.add("no"); });
     const head = k < 0 ? `<b class="no">超时了</b>，听到就要马上反应` : ok ? `<b class="ok">对</b>${Listen.t0 ? `，用时 ${rt.toFixed(1)} 秒` : ""}` : `<b class="no">不对</b>，这句已加入复习`;
+    let diff = "";
+    if(q.type === "detail" && k >= 0 && !ok){
+      const a = q.ans.split(" "), b = q.opts[k].split(" "); const i = a.findIndex((w, j) => w !== b[j]);
+      if(i >= 0) diff = `<p class="small" style="margin-top:6px">原句是 <b class="ok">${esc(a[i])}</b>，你选的是 <b class="no">${esc(b[i])}</b>。连读时这种小词最容易被吞掉，多听几遍慢速。</p>`;
+    }
     $("#ls-fb").innerHTML = `
-      <p>${head}</p>
+      <p>${head}</p>${diff}
       <div class="panel" style="margin-top:10px">
         <div class="en" style="font-size:20px">${renderEn(q.it.chunks)}</div>
         <p class="zh blur" id="ls-zh" style="margin-top:4px">${esc(q.it.zh)}</p>
+        ${q.type !== "reply" && q.it.reply ? `<p class="small muted" style="margin-top:8px">对方可能回：<b style="color:var(--ink)">${esc(q.it.reply)}</b></p>` : ""}
         <div class="row" style="margin-top:12px;gap:8px">
           <button class="chip" id="ls-again">再听</button><button class="chip" id="ls-slow">慢速</button>
           <button class="chip" id="ls-save">加入复习</button>
@@ -301,8 +476,8 @@ Views.listen = {
     $("#ls-zh").onclick = e => e.currentTarget.classList.toggle("show");
     $("#ls-again").onclick = () => playWith(play, q.it.en);
     $("#ls-slow").onclick = () => playWith(play, q.it.en, Math.max(0.5, Settings.get("speed") - 0.3));
-    $("#ls-save").onclick = e => { SRS.schedule(q.it.id, Date.now()); e.currentTarget.textContent = "已加入"; e.currentTarget.disabled = true; };
-    if(!ok){ const s = $("#ls-save"); s.textContent = "已加入"; s.disabled = true; }
+    $("#ls-save").onclick = e => { SRS.schedule(q.it.id, Date.now()); Review.queue = null; e.currentTarget.textContent = "已加入"; e.currentTarget.disabled = true; };
+    if(!ok){ const s = $("#ls-save"); s.textContent = "已加入"; s.disabled = true; Review.queue = null; }
     $("#ls-next").onclick = () => { Speech.stop(); Listen.i++; this.renderQ(); };
   },
   finish(){
@@ -317,16 +492,97 @@ Views.listen = {
     $("#v-listen").innerHTML = `
       <h1>这组完成了</h1>
       <div class="scores" style="margin:20px 0">
-        <div class="stat"><b class="${okN >= 8 ? "ok" : okN >= 6 ? "mid" : "no"}">${okN}/${r.length}</b><span>答对</span></div>
+        <div class="stat"><b class="${okN >= r.length * 0.8 ? "ok" : okN >= r.length * 0.6 ? "mid" : "no"}">${okN}/${r.length}</b><span>答对</span></div>
         <div class="stat"><b>${avg ? avg.toFixed(1) + "s" : "—"}</b><span>平均反应</span></div>
         <div class="stat"><b>${r.length - okN}</b><span>加入复习</span></div>
       </div>
-      <p class="muted">${okN === r.length ? (avg && avg < 3 ? "又快又准。下一组试试「挑战 5 秒」，或者调快语速。" : "全对了！下一组试着更快作答。") : "答错的句子已经放进复习，明天会再遇到它们。"}</p>
+      <p class="muted">${okN === r.length ? (avg && avg < 3 ? "又快又准。下一组试试「挑战 5 秒」，或者把语速调快。" : "全对了！下一组试着更快作答。") : "答错的句子已经放进复习，明天会再遇到它们。"}</p>
       <div class="stack" style="margin-top:22px">
         <button class="btn line block" style="--c:var(--orange);padding:14px" id="ls-more">再来一组</button>
-        <a class="btn ghost block" href="#today">回到今日</a>
+        <button class="btn ghost block" id="ls-setup">换个场景</button>
       </div>`;
     $("#ls-more").onclick = () => this.start();
+    $("#ls-setup").onclick = () => this.renderSetup();
+  },
+
+  /* ---------- 随身听 ---------- */
+  async startHF(){
+    const list = shuffle(listenPool(Listen.scene));
+    if(!list.length){ toast("这里还没有句子"); return; }
+    Object.assign(Listen.hf, { list, i: 0, playing: true });
+    Listen.state = "hf";
+    try{ if(navigator.wakeLock) Listen.hf.lock = await navigator.wakeLock.request("screen"); }catch(_){}
+    this.renderHF();
+    this.loopHF();
+  },
+  stopHF(){
+    Listen.hf.playing = false; Listen.hf.token++; Speech.stop();
+    try{ Listen.hf.lock && Listen.hf.lock.release(); }catch(_){}
+    Listen.hf.lock = null;
+  },
+  renderHF(){
+    const h = Listen.hf, it = h.list[h.i];
+    if(!it){ this.renderSetup(); return; }
+    $("#v-listen").innerHTML = `
+      <div class="row between">
+        <button class="icon-btn" id="hf-quit" aria-label="退出">${ICON.x}</button>
+        <span class="small muted">${esc(poolLabel(Listen.scene))}，${h.i + 1} / ${h.list.length}</span>
+      </div>
+      <div class="hf-stage">
+        <div class="row" style="justify-content:center">${bulletHTML(it.scene, true)}</div>
+        <div class="en hf-en${h.showText ? "" : " blur"}" id="hf-en">${renderEn(it.chunks)}</div>
+        <p class="zh blur" id="hf-zh">${esc(it.zh || "")}</p>
+        ${h.reply && it.reply ? `<p class="hf-reply${h.showText ? "" : " blur"}">${esc(it.reply)}</p>` : ""}
+      </div>
+      <div class="row" style="justify-content:center;gap:18px">
+        <button class="icon-btn" id="hf-prev" aria-label="上一句"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
+        <button class="play" id="hf-toggle" style="--c:var(--orange);margin:0" aria-label="${h.playing ? "暂停" : "播放"}">${h.playing ? '<svg viewBox="0 0 24 24" fill="currentColor" style="margin:0"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>' : ICON.play}</button>
+        <button class="icon-btn" id="hf-next" aria-label="下一句"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
+      </div>
+      <div class="chips" style="justify-content:center;margin-top:20px;flex-wrap:wrap">
+        ${[1, 2, 3].map(n => `<button class="chip${h.reps === n ? " on" : ""}" data-reps="${n}">每句 ${n} 遍</button>`).join("")}
+      </div>
+      <div class="chips" style="justify-content:center;margin-top:8px;flex-wrap:wrap">
+        <button class="chip${h.reply ? " on" : ""}" id="hf-reply">带上回应</button>
+        <button class="chip${h.showText ? " on" : ""}" id="hf-text">显示英文</button>
+      </div>
+      <p class="small muted" style="text-align:center;margin-top:16px">锁屏后浏览器可能会停止朗读，听的时候保持屏幕亮着。</p>`;
+    $("#hf-quit").onclick = () => { this.stopHF(); this.renderSetup(); };
+    $("#hf-toggle").onclick = () => { if(h.playing){ this.stopHF(); this.renderHF(); } else { h.playing = true; this.renderHF(); this.loopHF(); } };
+    $("#hf-prev").onclick = () => this.jumpHF(-1);
+    $("#hf-next").onclick = () => this.jumpHF(1);
+    $$("[data-reps]").forEach(b => b.onclick = () => { h.reps = +b.dataset.reps; $$("[data-reps]").forEach(x => x.classList.toggle("on", x === b)); });
+    $("#hf-reply").onclick = () => { h.reply = !h.reply; this.renderHF(); };
+    $("#hf-text").onclick = () => { h.showText = !h.showText; this.renderHF(); };
+    $("#hf-zh").onclick = e => e.currentTarget.classList.toggle("show");
+    $("#hf-en").onclick = e => e.currentTarget.classList.remove("blur");
+  },
+  jumpHF(d){
+    const h = Listen.hf; const was = h.playing;
+    this.stopHF();
+    h.i = (h.i + d + h.list.length) % h.list.length;
+    h.playing = was; this.renderHF();
+    if(was) this.loopHF();
+  },
+  async loopHF(){
+    const h = Listen.hf, my = ++h.token;
+    const alive = () => my === h.token && h.playing && Listen.state === "hf" && location.hash === "#listen";
+    while(alive()){
+      const it = h.list[h.i];
+      for(let r = 0; r < h.reps; r++){
+        const btn = $("#hf-toggle");
+        if(!(await playWith(null, it.en)) || !alive()) return;
+        await sleep(900); if(!alive()) return;
+      }
+      if(h.reply && it.reply){
+        if(!(await Speech.say(it.reply, null, true)) || !alive()) return;
+        await sleep(900); if(!alive()) return;
+      }
+      await sleep(900); if(!alive()) return;
+      h.i = (h.i + 1) % h.list.length;
+      if(h.i === 0) Log.add("listen");
+      this.renderHF();
+    }
   }
 };
 
@@ -512,6 +768,155 @@ Views.speak = {
   }
 };
 
+/* ---------- 口语：话题列表 + 开口反应 ---------- */
+Object.assign(Speak, { cat: "all", reflex: null });
+
+Object.assign(Views.speak, {
+  show(){
+    if(Speak.reflex) this.renderReflex();
+    else if(Speak.topic !== null || Speak.custom) this.renderSession();
+    else this.renderList();
+  },
+  renderList(){
+    const td = topicOfDay(), t = TOPICS[td];
+    const list = TOPICS.map((x, k) => [x, k]).filter(([x]) => Speak.cat === "all" || x.cat === Speak.cat);
+    $("#v-speak").innerHTML = `
+      <h1>口语</h1>
+      <p class="muted" style="margin:8px 0 18px">选一个场景，用英语说出来。说不出来的地方可以夹中文，AI 会改成美国人日常的说法，再陪你接着聊下去。</p>
+      <button class="today-topic" data-t="${td}">
+        <div class="k">今日话题</div><div class="t">${esc(t.title)}</div><div class="d">${esc(t.brief)}</div>
+      </button>
+      <button class="hf-card" id="sp-reflex" style="margin-top:12px">
+        <div class="grow"><div class="t">开口反应</div><div class="small muted">听对方说一句，马上用英语回。练的是不经过中文、张口就来。</div></div>
+        <span class="mic" style="--c:var(--green);width:44px;height:44px">${ICON.mic}</span>
+      </button>
+      <h3>自己出题</h3>
+      <div class="row"><input type="text" id="sp-custom" placeholder="比如：跟邻居说他家狗太吵了" aria-label="自定义场景"><button class="btn sm" id="sp-custom-go">开始</button></div>
+      <h3>全部话题 <span class="small muted">${TOPICS.length} 个</span></h3>
+      <div class="chips" id="sp-cats">
+        <button class="chip${Speak.cat === "all" ? " on" : ""}" data-c="all">全部</button>
+        ${CATS.map(c => `<button class="chip${Speak.cat === c.key ? " on" : ""}" data-c="${c.key}">${esc(c.name)}</button>`).join("")}
+      </div>
+      <div class="panel" style="padding:4px 16px;margin-top:10px">
+        ${list.map(([x, k]) => `<button class="topic" data-t="${k}">${bulletHTML(x.scene)}<div class="grow"><div class="t">${esc(x.title)}</div><div class="d">${esc(x.brief)}</div></div></button>`).join("")}
+      </div>`;
+    $$("#v-speak [data-t]").forEach(b => b.onclick = () => this.open(+b.dataset.t));
+    $$("#sp-cats .chip").forEach(b => b.onclick = () => { Speak.cat = b.dataset.c; this.renderList(); });
+    $("#sp-reflex").onclick = () => this.startReflex();
+    $("#sp-custom-go").onclick = () => {
+      const s = $("#sp-custom").value.trim(); if(!s){ $("#sp-custom").focus(); return; }
+      Speak.custom = { scene: null, title: "自定义场景", them: "the other person", brief: s, hints: [] };
+      Speak.topic = null; Speak.turns = []; this.renderSession();
+    };
+  },
+  open(k){
+    Speak.topic = k; Speak.custom = null; Speak.reflex = null;
+    const t = TOPICS[k];
+    Speak.turns = t.opener ? [{ who: "them", text: t.opener, zh: t.opener_zh }] : [];
+    this.renderSession(); window.scrollTo(0, 0);
+    if(t.opener) setTimeout(() => { const b = $('[data-play="0"]'); if(b && location.hash === "#speak") playWith(b, t.opener, null, true); }, 350);
+  },
+
+  /* 开口反应 */
+  startReflex(){
+    const pool = Speak.cat === "all" ? ALL_ITEMS : ALL_ITEMS.filter(x => (CATS.find(c => c.key === Speak.cat) || { scenes: [] }).scenes.includes(x.scene));
+    Speak.reflex = { items: shuffle(pool).slice(0, 8), i: 0, said: "", t0: 0, rt: null, results: [], phase: "listen" };
+    Speak.topic = null; Speak.custom = null;
+    this.renderReflex();
+  },
+  renderReflex(){
+    const R = Speak.reflex, it = R.items[R.i];
+    stopActiveListen();
+    if(!it){
+      const ok = R.results.filter(x => x).length;
+      Log.add("speak");
+      $("#v-speak").innerHTML = `
+        <h1>开口反应完成</h1>
+        <p class="muted" style="margin:10px 0 20px">${R.items.length} 句里，你张口就回上了 ${ok} 句。卡住的句子已经加入复习。</p>
+        <div class="stack">
+          <button class="btn line block" style="--c:var(--green);padding:14px" id="rf-more">再来一组</button>
+          <button class="btn ghost block" id="rf-back">回到话题</button>
+        </div>`;
+      $("#rf-more").onclick = () => this.startReflex();
+      $("#rf-back").onclick = () => { Speak.reflex = null; this.renderList(); };
+      return;
+    }
+    R.said = ""; R.rt = null; R.phase = "listen";
+    const sc = SCENE_BY_KEY[it.scene];
+    $("#v-speak").innerHTML = `
+      <div class="row between">
+        <button class="icon-btn" id="rf-quit" aria-label="退出">${ICON.x}</button>
+        <span class="small muted">${R.i + 1} / ${R.items.length}</span>
+      </div>
+      <div class="progress" style="margin-top:14px">${R.items.map((_, k) => `<i class="${k < R.results.length ? (R.results[k] ? "ok" : "no") : k === R.i ? "cur" : ""}"></i>`).join("")}</div>
+      <div class="row" style="justify-content:center;gap:8px">${bulletHTML(it.scene)}<span class="small muted">${esc(sc.name)}</span></div>
+      <p style="text-align:center;font-weight:700;margin-top:10px">对方说了一句，用英语回应他</p>
+      <button class="play" id="rf-play" style="--c:var(--ink)" aria-label="播放">${ICON.play}</button>
+      <div class="row" style="justify-content:center;gap:8px"><button class="chip" id="rf-again">再听一遍</button><button class="chip" id="rf-show">看原句</button></div>
+      <p class="en" id="rf-line" hidden style="font-size:19px;text-align:center;margin-top:10px">${renderEn(it.chunks)}</p>
+      <div class="row" style="justify-content:center;margin-top:20px"><button class="mic lg" id="rf-mic" aria-label="开始回答">${ICON.mic}</button></div>
+      <p id="rf-said" style="text-align:center;font-weight:600;min-height:24px;margin-top:10px"></p>
+      <p class="small muted" style="text-align:center" id="rf-tip">听完点麦克风，直接说。不用完美，先开口。</p>
+      <div id="rf-res"></div>`;
+    $("#rf-quit").onclick = () => { stopActiveListen(); Speak.reflex = null; this.renderList(); };
+    const play = $("#rf-play");
+    const go = async () => { const ok = await playWith(play, it.en, null, true); if(ok && Speak.reflex === R && R.phase === "listen") R.t0 = performance.now(); };
+    play.onclick = go; $("#rf-again").onclick = go;
+    $("#rf-show").onclick = e => { $("#rf-line").hidden = false; e.currentTarget.remove(); };
+    $("#rf-mic").onclick = () => this.reflexMic();
+    setTimeout(() => { if(location.hash === "#speak" && Speak.reflex === R && R.phase === "listen") go(); }, 300);
+  },
+  async reflexMic(){
+    const R = Speak.reflex, it = R.items[R.i], mic = $("#rf-mic"), out = $("#rf-said");
+    if(activeListen){ stopActiveListen(); return; }
+    Speech.stop();
+    R.phase = "speak";
+    if(R.t0 && R.rt === null) R.rt = (performance.now() - R.t0) / 1000;
+    mic.classList.add("on"); mic.innerHTML = ICON.stop;
+    out.textContent = "请说…"; $("#rf-tip").textContent = "说完再点一下";
+    activeListen = startListening({ onText: t => out.textContent = t });
+    const r = await activeListen.done; activeListen = null;
+    if(Speak.reflex !== R || !$("#rf-mic")) return;
+    mic.classList.remove("on"); mic.innerHTML = ICON.mic;
+    R.said = r.text || "";
+    out.textContent = r.text ? "“" + r.text + "”" : srErrorText(r.error);
+    this.showReflexAnswer();
+  },
+  showReflexAnswer(){
+    const R = Speak.reflex, it = R.items[R.i];
+    $("#rf-tip").hidden = true;
+    const hasKey = !!Settings.get("apiKey");
+    $("#rf-res").innerHTML = `
+      <div class="panel" style="margin-top:14px">
+        <div class="small muted">参考回答${R.rt !== null ? `，你的反应时间 ${R.rt.toFixed(1)} 秒` : ""}</div>
+        <div class="row" style="align-items:flex-start;margin-top:6px"><button class="play sm" id="rf-ans" style="--c:var(--green)" aria-label="播放">${ICON.play}</button><div class="say grow" style="font-weight:700;font-size:18px">${esc(it.reply)}</div></div>
+        <p class="small muted" style="margin-top:8px">对方说的是：${esc(it.en)}（${esc(it.zh)}）</p>
+        ${R.said && hasKey ? `<button class="link" id="rf-ai" style="margin-top:10px">让 AI 把我的回答改得更地道</button>` : ""}
+      </div>
+      <div class="grades" style="grid-template-columns:1fr 1fr;margin-top:12px">
+        <button class="grade g0" data-r="0"><b>卡住了</b><span>加入复习</span></button>
+        <button class="grade g3" data-r="1"><b>说出来了</b><span>下一句</span></button>
+      </div>`;
+    $("#rf-ans").onclick = e => playWith(e.currentTarget, it.reply);
+    playWith($("#rf-ans"), it.reply);
+    $$("#rf-res [data-r]").forEach(b => b.onclick = () => {
+      const ok = b.dataset.r === "1";
+      if(!ok){ SRS.schedule(it.id, Date.now()); Review.queue = null; }
+      R.results.push(ok); R.i++; this.renderReflex();
+    });
+    const ai = $("#rf-ai");
+    if(ai) ai.onclick = () => {
+      const said = R.said;
+      Speak.reflex = null; Speak.topic = null;
+      Speak.custom = { scene: it.scene, title: "开口反应", them: "the other person", brief: `对方对你说：“${it.en}”（${it.zh}）。你自然地回应。`, hints: [] };
+      Speak.turns = [{ who: "them", text: it.en, zh: it.zh }];
+      this.renderSession();
+      $("#sp-input").value = said;
+      this.send();
+    };
+  }
+});
+
 /* ================= 连读 ================= */
 const Link = { tokens: [], links: [], text: LINK_PRESETS[0], recorder: null, stream: null, chunks: [], recDone: null, recogDone: null, recording: false, recTimer: null };
 Views.link = {
@@ -519,7 +924,7 @@ Views.link = {
     $("#v-link").innerHTML = `
       <h1>连读跟读</h1>
       <p class="muted" style="margin:8px 0 16px">自动标出连读点，听美音示范，录下你读的，检查哪里没连上、哪里断开了。</p>
-      <div class="chips" id="lk-presets">${LINK_PRESETS.map((p, i) => `<button class="chip${p === Link.text ? " on" : ""}" data-i="${i}">${esc(p)}</button>`).join("")}</div>
+      <div class="chips" id="lk-presets"><button class="chip" id="lk-rand">从句库随机一句</button>${LINK_PRESETS.map((p, i) => `<button class="chip${p === Link.text ? " on" : ""}" data-i="${i}">${esc(p)}</button>`).join("")}</div>
       <textarea id="lk-input" rows="2" spellcheck="false" style="margin-top:10px;min-height:60px" aria-label="练习句子">${esc(Link.text)}</textarea>
       <div class="panel" style="margin-top:14px">
         <div class="lk-sent" id="lk-display"></div>
@@ -556,7 +961,8 @@ Views.link = {
         <h3>建议</h3><ul id="lk-tips" style="padding-left:20px;margin:0"></ul>
       </div>`;
     $("#lk-input").oninput = e => { Link.text = e.target.value; $$("#lk-presets .chip").forEach(c => c.classList.remove("on")); this.renderSentence(); };
-    $$("#lk-presets .chip").forEach(b => b.onclick = () => { Link.text = LINK_PRESETS[+b.dataset.i]; $("#lk-input").value = Link.text; $$("#lk-presets .chip").forEach(c => c.classList.toggle("on", c === b)); this.renderSentence(); });
+    $("#lk-rand").onclick = () => { Link.text = shuffle(ALL_ITEMS)[0].en; $("#lk-input").value = Link.text; $$("#lk-presets .chip").forEach(c => c.classList.remove("on")); this.renderSentence(); };
+    $$("#lk-presets .chip[data-i]").forEach(b => b.onclick = () => { Link.text = LINK_PRESETS[+b.dataset.i]; $("#lk-input").value = Link.text; $$("#lk-presets .chip").forEach(c => c.classList.toggle("on", c === b)); this.renderSentence(); });
     $("#lk-speed").oninput = e => { const v = +e.target.value; Settings.set("speed", v); $("#lk-speed-v").textContent = v.toFixed(2) + "×"; const a = $("#lk-audio"); if(a.src) a.playbackRate = v; };
     $("#lk-model").onclick = () => Speech.say(Link.text);
     $("#lk-both").onclick = async () => { await Speech.say(Link.text); await sleep(350); this.playMine(); };
@@ -799,21 +1205,27 @@ Views.me = {
 };
 
 /* ================= 路由 ================= */
-const ROUTES = ["today", "review", "listen", "speak", "link", "me"];
+const ROUTES = ["today", "review", "library", "listen", "speak", "link", "me"];
 function route(){
   let v = location.hash.slice(1) || "today";
   if(!ROUTES.includes(v)) v = "today";
   Speech.stop(); stopActiveListen(); clearInterval(Listen.timer);
+  if(Listen.state === "hf" && v !== "listen") Views.listen.stopHF();
   if(Link.recording){ Link.recording = false; clearInterval(Link.recTimer); try{ Link.recorder && Link.recorder.stop(); }catch(_){} Link.stream && Link.stream.getTracks().forEach(t => t.stop()); }
   ROUTES.forEach(x => $("#v-" + x).hidden = x !== v);
-  const tab = v === "review" ? "today" : v;
+  const tab = v === "review" || v === "library" ? "today" : v;
   $$(".tabs a").forEach(a => a.classList.toggle("on", a.dataset.tab === tab));
   Views[v].show();
   window.scrollTo(0, 0);
 }
 document.addEventListener("click", e => {
-  const a = e.target.closest("[data-act='today-topic']");
-  if(a){ Speak.topic = topicOfDay(); Speak.custom = null; Speak.turns = []; if(location.hash === "#speak"){ e.preventDefault(); route(); } }
+  const a = e.target.closest("[data-act]");
+  if(!a) return;
+  const act = a.dataset.act;
+  if(act === "today-topic"){ const k = topicOfDay(), t = TOPICS[k]; Speak.reflex = null; Speak.topic = k; Speak.custom = null; Speak.turns = t.opener ? [{ who: "them", text: t.opener, zh: t.opener_zh }] : []; }
+  if(act === "hf-learned"){ Listen.scene = "learned"; Listen.state = "setup"; setTimeout(() => Views.listen.startHF(), 50); }
+  if(act === "listen-scene"){ Listen.scene = a.dataset.scene; Listen.state = "setup"; }
+  if(location.hash === a.getAttribute("href")){ e.preventDefault(); route(); }
 });
 window.addEventListener("hashchange", route);
 route();
