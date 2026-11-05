@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>我的 App</title>
+<meta name="theme-color" content="#1c1c20">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="我的App">
+<style>
+  :root{--bg:#f6f5f2;--card:#fff;--ink:#1d1d1f;--muted:#6b6b70;--line:#e6e4df}
+  @media (prefers-color-scheme: dark){:root{--bg:#141416;--card:#1e1e21;--ink:#eeeef0;--muted:#9a9aa2;--line:#2e2e33}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Noto Sans CJK SC","Microsoft YaHei",sans-serif}
+  main{max-width:640px;margin:0 auto;padding:28px 18px 48px}
+  h1{font-size:28px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:14px;margin:0 0 22px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+  a.app{display:block;text-decoration:none;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;transition:transform .1s}
+  a.app:active{transform:scale(.97)}
+  .ic{width:52px;height:52px;border-radius:14px;margin-bottom:12px;display:grid;place-items:center;color:#fff;font-size:24px;font-weight:700}
+  .name{font-weight:600}
+  .desc{font-size:13px;color:var(--muted);margin-top:2px}
+  .tip{margin-top:28px;font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+  <h1>我的 App</h1>
+  <p class="sub">点开即用，每个 App 也可以单独「添加到主屏幕」</p>
+  <div class="grid" id="grid"></div>
+  <p class="tip">想要新 App？直接告诉 Claude，做好后会自动出现在这里。</p>
+</main>
+<script>
+// 新 App 加在这里：{path, name, desc, icon, color}
+const APPS = [
+  {path:"linking-practice/", name:"英语连读练习", desc:"标连读点 · 美音示范 · 变速 · 录音打分", icon:"‿", color:"#2f5bea"}
+];
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+document.getElementById("grid").innerHTML = APPS.map(a => `
+  <a class="app" href="${esc(a.path)}">
+    <div class="ic" style="background:${esc(a.color)}">${esc(a.icon)}</div>
+    <div class="name">${esc(a.name)}</div>
+    <div class="desc">${esc(a.desc)}</div>
+  </a>`).join("");
+</script>
+</body>
+</html>

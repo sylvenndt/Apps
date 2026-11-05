@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>英语连读练习</title>
+<meta name="theme-color" content="#2f5bea">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="连读练习">
+<style>
+  :root{
+    --bg:#f6f5f2; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; --line:#e6e4df;
+    --accent:#2f5bea; --good:#1f8f5a; --bad:#d23c3c; --warn:#c77a12;
+    --cv:#2f5bea; --vv:#1f8f5a; --as:#8a3ffc; --lp:#c77a12; --hd:#0f8b8d;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#141416; --card:#1e1e21; --ink:#eeeef0; --muted:#9a9aa2; --line:#2e2e33;
+      --accent:#6d8dff; --good:#3fbf7f; --bad:#ff6b6b; --warn:#f0a63a;
+      --cv:#6d8dff; --vv:#3fbf7f; --as:#b48cff; --lp:#f0a63a; --hd:#35c0c2; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.55 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Noto Sans CJK SC","Microsoft YaHei",sans-serif}
+  main{max-width:760px;margin:0 auto;padding:20px 16px 48px}
+  h1{font-size:24px;margin:4px 0 2px}
+  .sub{color:var(--muted);margin:0 0 16px;font-size:14px}
+  h3{font-size:15px;margin:20px 0 8px;color:var(--muted);font-weight:600}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+  label.t{font-size:13px;color:var(--muted);display:block;margin-bottom:6px}
+  .presets{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:8px;scrollbar-width:thin}
+  .chip{flex:0 0 auto;border:1px solid var(--line);background:transparent;color:var(--ink);
+    border-radius:999px;padding:5px 11px;font-size:13px;cursor:pointer;white-space:nowrap}
+  .chip.on{border-color:var(--accent);color:var(--accent)}
+  textarea{width:100%;font:inherit;font-size:16px;padding:10px 12px;border:1px solid var(--line);
+    border-radius:10px;background:transparent;color:var(--ink);resize:vertical}
+  .sentence{font-size:22px;line-height:2.1;margin:14px 0 6px;word-break:break-word;
+    font-family:Georgia,"Times New Roman",serif}
+  .w{white-space:nowrap}
+  .lk{font-weight:700;margin:0 1px}
+  .c-cv{color:var(--cv)} .c-vv{color:var(--vv)} .c-as{color:var(--as)} .c-lp{color:var(--lp)} .c-hd{color:var(--hd)}
+  .legend{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--muted);margin-bottom:6px}
+  .legend span::before{content:"‿ ";font-weight:700}
+  ul.links{list-style:none;margin:8px 0 0;padding:0}
+  ul.links li{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-top:1px solid var(--line)}
+  .pair{font-family:Georgia,serif;font-size:17px;min-width:96px}
+  .kind{font-size:12px;border-radius:6px;padding:1px 7px;border:1px solid currentColor;white-space:nowrap}
+  .hint{font-size:14px;color:var(--muted)}
+  .hint b{color:var(--ink);font-family:Georgia,serif;font-weight:600;white-space:nowrap}
+  .grow{flex:1;min-width:0}
+  .mini{border:none;background:transparent;color:var(--accent);font-size:15px;cursor:pointer;padding:2px 6px}
+  .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+  button.b{font:inherit;font-size:15px;border:1px solid var(--line);background:transparent;color:var(--ink);
+    border-radius:10px;padding:9px 14px;cursor:pointer}
+  button.b:disabled{opacity:.4;cursor:default}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.rec{background:var(--bad);border-color:var(--bad);color:#fff}
+  select{font:inherit;font-size:14px;padding:8px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);max-width:200px}
+  .upload{font-size:14px;color:var(--accent);cursor:pointer;border:1px dashed var(--line);border-radius:10px;padding:8px 12px}
+  .upload input{display:none}
+  #status{font-size:14px;color:var(--muted);min-height:20px}
+  #status.err{color:var(--bad)}
+  #live{font-family:Georgia,serif;font-size:17px;color:var(--muted);min-height:24px;margin-top:4px}
+  .scores{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .tile{border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center}
+  .tile .n{font-size:26px;font-weight:700}
+  .tile .l{font-size:12px;color:var(--muted)}
+  .ok{color:var(--good)} .no{color:var(--bad)} .mid{color:var(--warn)}
+  .m-ok{border-bottom:2px solid var(--good)}
+  .m-no{color:var(--bad);text-decoration:line-through;text-decoration-thickness:1px}
+  .lk.broken{color:var(--bad)}
+  canvas{width:100%;height:96px;display:block;border-radius:8px;background:color-mix(in srgb,var(--line) 35%,transparent)}
+  .heard{font-family:Georgia,serif;font-size:17px}
+  ul.tips{margin:0;padding-left:20px} ul.tips li{margin:6px 0}
+  .note{font-size:13px;color:var(--muted)} .note p{margin:6px 0}
+  .tag{font-size:12px;color:var(--muted)}
+  .t2{font-size:14px;color:var(--muted)}
+  .speed{margin-bottom:12px}
+  .speed-top{display:flex;justify-content:space-between;align-items:baseline}
+  .speed-top b{font-size:20px;font-variant-numeric:tabular-nums}
+  .speed input[type=range]{width:100%;margin:8px 0;accent-color:var(--accent);height:28px}
+  .speed-presets{display:flex;gap:6px;margin-bottom:4px}
+  .speed-presets .chip{flex:1}
+  .vtip{font-size:13px;color:var(--muted);margin:2px 0 4px}
+  .vtip summary{cursor:pointer;color:var(--accent)}
+  .vtip p{margin:6px 0}
+  .opt{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--muted);margin:2px 0 8px}
+  .opt input{margin-top:3px}
+  select#voice{max-width:none;flex:1;min-width:0}
+  body{padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+</style>
+</head>
+<body>
+<main>
+  <h1>英语连读练习</h1>
+  <p class="sub">自动标出连读点 · 听示范 · 录音检测停顿与发音</p>
+
+  <section class="card">
+    <label class="t">选一句，或输入你自己的英文句子</label>
+    <div class="presets" id="presets"></div>
+    <textarea id="input" rows="2" spellcheck="false"></textarea>
+    <div id="display" class="sentence"></div>
+    <div class="legend">
+      <span class="c-cv">辅元连读</span><span class="c-vv">元音过渡</span>
+      <span class="c-as">音的同化</span><span class="c-lp">失去爆破/合并</span><span class="c-hd">h 弱读</span>
+    </div>
+    <ul class="links" id="linkList"></ul>
+  </section>
+
+  <section class="card">
+    <div class="speed">
+      <div class="speed-top"><span class="t2">速度</span><b id="speedVal">0.80×</b></div>
+      <input type="range" id="speed" min="0.5" max="1.5" step="0.05" value="0.8" aria-label="速度">
+      <div class="speed-presets">
+        <button class="chip" data-sp="0.5">0.5×</button><button class="chip" data-sp="0.75">0.75×</button>
+        <button class="chip" data-sp="1">1×</button><button class="chip" data-sp="1.25">1.25×</button>
+      </div>
+      <div class="tag">示范朗读和「我的录音」都按这个速度播放</div>
+    </div>
+    <div class="controls">
+      <button class="b" id="playModel">▶ 美音示范</button>
+      <button class="b" id="playBoth" disabled>⇄ 示范 → 我的</button>
+    </div>
+    <div class="controls">
+      <span class="t2">发音人</span>
+      <select id="voice" aria-label="美音发音人"></select>
+    </div>
+    <details class="vtip"><summary>想要更自然的美音？</summary>
+      <p><b>iPhone：</b>设置 → 辅助功能 → 朗读内容 → 声音 → 英语 → 英语（美国），下载带「优化音质 / Premium」的声音（如 Ava、Zoe、Evan），回到这里刷新即可选择。</p>
+      <p><b>安卓：</b>设置 → 无障碍（或系统）→ 文字转语音 → 首选引擎选「Google 语音服务」→ 语言选「英语（美国）」并下载高音质语音。</p>
+    </details>
+    <div class="controls" style="margin-top:12px">
+      <button class="b primary" id="recBtn">● 开始录音</button>
+      <button class="b" id="playMine" disabled>▶ 我的录音</button>
+      <label class="upload">上传录音<input type="file" accept="audio/*,video/*" id="file"></label>
+    </div>
+    <label class="opt"><input type="checkbox" id="keepAudio" checked> 同时保存录音（用于回放和停顿分析；安卓上如果识别总失败，可以关掉试试）</label>
+    <div id="status">点「开始录音」，读完整句后点「停止」。</div>
+    <div id="live"></div>
+    <audio id="mine" hidden></audio>
+  </section>
+
+  <section class="card" id="result" hidden>
+    <div class="scores">
+      <div class="tile"><div class="n" id="sAcc">—</div><div class="l">发音准确度</div></div>
+      <div class="tile"><div class="n" id="sFlu">—</div><div class="l">连贯度</div></div>
+      <div class="tile"><div class="n" id="sLink">—</div><div class="l">连读点通过</div></div>
+    </div>
+    <div id="recogBlock">
+      <h3>机器听到的</h3>
+      <div class="heard" id="heard"></div>
+      <div class="sentence" id="compare" style="font-size:19px"></div>
+    </div>
+    <h3>停顿分析 <span class="tag" id="rateTag"></span></h3>
+    <canvas id="wave"></canvas>
+    <div id="pauseText" class="hint" style="margin-top:6px"></div>
+    <h3>连读点检查</h3>
+    <ul class="links" id="linkCheck"></ul>
+    <h3>建议</h3>
+    <ul class="tips" id="tips"></ul>
+  </section>
+
+  <footer class="note card">
+    <p><b>怎么判断的：</b>① 语音识别看每个词有没有被听对——连读不清时，机器常把相邻两个词听错；② 分析录音波形，句子中间超过约 0.2 秒的静音视为“断开”，按音节比例估算断在哪两个词之间（位置是估算）。</p>
+    <p><b>使用环境：</b>iPhone 用 Safari、安卓用 Chrome 打开，再「添加到主屏幕」就像 App 一样使用；语音识别需要联网。微信等 App 内置浏览器、以及在 Claude 应用里预览时不允许用麦克风——这时可以点「上传录音」，用手机录音或录一段视频后上传，做停顿分析（上传模式没有语音识别）。</p>
+    <p>它是练习辅助，不是专业测评：连读规则按拼写推断，个别单词可能标得不准。</p>
+  </footer>
+</main>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+const PRESETS = [
+  "Pick it up and put it on.",
+  "Not at all.",
+  "Can I have a cup of tea?",
+  "Did you get it?",
+  "What are you going to do about it?",
+  "Take a look at it.",
+  "Turn off the light and go out.",
+  "Would you like a piece of cake?",
+  "Tell him I'm at home.",
+  "Thank you for all of your help.",
+  "An apple a day keeps the doctor away.",
+  "Nice to meet you."
+];
+
+/* ---------------- 连读规则（按拼写推断） ---------------- */
+const STOPS = new Set(["p","b","t","d","k","g"]);
+const PAIR = {p:"p",b:"p",t:"t",d:"t",k:"k",g:"k",f:"f",v:"f",s:"s",z:"s","θ":"θ","ʃ":"ʃ","tʃ":"tʃ","dʒ":"tʃ",m:"m",n:"n",l:"l",r:"r"};
+const C = (ph) => ({type:"C", ph});
+const V = (g) => ({type:"V", glide:g});
+const LETTER = {c:"k",q:"k",j:"dʒ",x:"s",y:"j"};
+const letterPh = l => LETTER[l] || l;
+
+const FINAL_EXC = {
+  the:V("ə"), a:V("ə"), i:V("j"), my:V("j"), by:V("j"), buy:V("j"), why:V("j"), eye:V("j"), high:V("j"),
+  he:V("j"), she:V("j"), we:V("j"), me:V("j"), be:V("j"),
+  to:V("w"), do:V("w"), who:V("w"), you:V("w"), two:V("w"), too:V("w"), through:V("w"), though:V("w"), although:V("w"),
+  go:V("w"), so:V("w"), no:V("w"),
+  laugh:C("f"), enough:C("f"), rough:C("f"), tough:C("f"), cough:C("f"),
+  of:C("v"), is:C("z"), was:C("z"), has:C("z"), his:C("z"), as:C("z"), does:C("z"), says:C("z"), goes:C("z"),
+  one:C("n"), done:C("n"), gone:C("n"), none:C("n"), come:C("m"), some:C("m"),
+  are:C("r"), were:C("r"), your:C("r"), our:C("r"), hour:C("r")
+};
+const VOICELESS = new Set(["p","t","k","f","s","x","c","h"]);
+
+function finalSound(w){
+  if(!w) return null;
+  if(FINAL_EXC[w]) return FINAL_EXC[w];
+  if(/n't$/.test(w)) return C("t");
+  if(/'ll$/.test(w)) return C("l");
+  if(/'re$/.test(w)) return C("r");
+  if(/'ve$/.test(w)) return C("v");
+  if(/'m$/.test(w)) return C("m");
+  if(/'d$/.test(w)) return C("d");
+  if(/'s$/.test(w)) return C(/[ptkf]/.test(w[w.length-3]) ? "s" : "z");
+  w = w.replace(/'/g,"");
+  if(!w) return null;
+  if(/ch$/.test(w)) return C("tʃ");
+  if(/sh$/.test(w)) return C("ʃ");
+  if(/th$/.test(w)) return C("θ");
+  if(/ng$/.test(w)) return C("ŋ");
+  if(/ck$/.test(w)) return C("k");
+  if(/ph$/.test(w)) return C("f");
+  if(/igh$/.test(w)) return V("j");
+  if(/gh$/.test(w)) return V("w");
+  if(/(mb|mn)$/.test(w)) return C("m");
+  if(/gn$/.test(w)) return C("n");
+  if(/que$/.test(w)) return C("k");
+  if(/([aeiou]r|[aeiou]re|[^aeiouyw]re)$/.test(w)) return C("r");
+  if(/[bcdfgkmnpstvz]le$/.test(w)) return C("l");
+  if(w.length >= 3 && /[^aeiouyw]e$/.test(w)){
+    const p = w[w.length-2];
+    if(p==="c") return C("s");
+    if(p==="g") return C("dʒ");
+    if(p==="s") return C("z");
+    return C(letterPh(p));
+  }
+  if(w.length > 3 && /ed$/.test(w) && !/eed$/.test(w)){
+    const p = w[w.length-3];
+    if(p==="t" || p==="d") return C("d");
+    return C(VOICELESS.has(p) ? "t" : "d");
+  }
+  if(/x$/.test(w)) return C("s");
+  if(/s$/.test(w)){
+    if(/ss$/.test(w)) return C("s");
+    if(/(s|x|z|ch|sh|c|g)es$/.test(w)) return C("z");
+    const p = w[w.length-2];
+    if(/[ptkf]/.test(p)) return C("s");
+    if(/[aeiou]/.test(p) && w.length <= 4) return C("s");
+    return C("z");
+  }
+  if(/(ay|ey|oy|uy)$/.test(w)) return V("j");
+  if(/[^aeiou]y$/.test(w)) return V("j");
+  if(/(ee|ie|ea|ei|i)$/.test(w)) return V("j");
+  if(/(ow|ew|ou|oo|ue|o|u)$/.test(w)) return V("w");
+  if(/(aw|a|ah|oh|eh|uh)$/.test(w)) return V("ə");
+  if(/e$/.test(w)) return V("j");
+  if(/w$/.test(w)) return V("w");
+  if(/y$/.test(w)) return V("j");
+  return C(letterPh(w[w.length-1]));
+}
+
+const INIT_V_EXC = new Set(["hour","hours","honest","honestly","honor","honour","heir"]);
+const H_WEAK = new Set(["him","her","his","have","has","had","he"]);
+function initialSound(w){
+  w = (w||"").replace(/'/g,"");
+  if(!w) return null;
+  let s;
+  if(INIT_V_EXC.has(w)) s = V();
+  else if(/^(one|once)$/.test(w)) s = C("w");
+  else if(/^(use|usu|uni|eu|ewe)/.test(w)) s = C("j");
+  else if(/^[aeiou]/.test(w)) s = V();
+  else if(/^y/.test(w)) s = C("j");
+  else if(/^th/.test(w)) s = C("θ");
+  else if(/^sh/.test(w)) s = C("ʃ");
+  else if(/^ch/.test(w)) s = C("tʃ");
+  else if(/^ph/.test(w)) s = C("f");
+  else if(/^wh/.test(w)) s = C("w");
+  else if(/^kn/.test(w)) s = C("n");
+  else if(/^wr/.test(w)) s = C("r");
+  else if(/^c[eiy]/.test(w)) s = C("s");
+  else if(/^x/.test(w)) s = C("z");
+  else s = C(letterPh(w[0]));
+  s.hWeak = H_WEAK.has(w);
+  return s;
+}
+
+/* 把词拆成 “前半 + 末尾辅音字母”，用于读法提示 */
+function splitTail(w){
+  let s = w.replace(/'/g,"");
+  if(/[^aeiouyw]ed$/.test(s) && s.length > 3 && !/[td]ed$/.test(s)){
+    const fs = finalSound(w);
+    return {head:s.slice(0,-2), tail: fs && fs.ph==="t" ? "t" : "d"};
+  }
+  if(/[bcdfgkmnpstvz]le$/.test(s)) return {head:s.slice(0,-2), tail:"l"};
+  let tailOverride = null;
+  if(s.length >= 3 && /[^aeiouyw]e$/.test(s)){
+    const p = s[s.length-2];
+    if(p==="c") tailOverride = "s";
+    if(p==="g") tailOverride = "j";
+    s = s.slice(0,-1);
+  }
+  const m = s.match(/(tch|ch|sh|th|ng|ck|ph|ll|ss|[bcdfghjklmnpqrstvxz])$/);
+  if(!m) return {head:s, tail:""};
+  let tail = m[1];
+  if(tail==="ll") tail = "l";
+  if(tail==="ss") tail = "s";
+  return {head:s.slice(0, s.length - m[1].length) + (m[1]==="ll"||m[1]==="ss" ? m[1][0] : ""), tail: tailOverride || tail};
+}
+
+function cleanWord(raw){ return raw.toLowerCase().replace(/[’‘]/g,"'").replace(/[^a-z']/g,"").replace(/^'+|'+$/g,""); }
+
+function tokenize(text){
+  const parts = text.trim().split(/\s+/).filter(Boolean);
+  const out = [];
+  for(const raw of parts){
+    const w = cleanWord(raw);
+    if(!w) { if(out.length) out[out.length-1].punct = true; continue; }
+    out.push({raw, w, punct: /[,.!?;:…—–"”)\]]$/.test(raw)});
+  }
+  return out;
+}
+
+function detectLinks(tokens){
+  const links = [];
+  for(let i=0; i<tokens.length-1; i++){
+    const A = tokens[i], B = tokens[i+1];
+    if(A.punct) continue;
+    const f = finalSound(A.w), s = initialSound(B.w);
+    if(!f || !s) continue;
+    const a = A.w, b = B.w;
+    let bl = b.replace(/'/g,"");
+    if(s.type==="V" && /^h/.test(bl)) bl = bl.slice(1); // hour, honest：h 不发音
+    let L = null;
+    if(f.type==="C"){
+      const {head, tail} = splitTail(a);
+      if(s.hWeak && f.ph!=="h"){
+        L = {cls:"hd", kind:"h 弱读连读", hint:`${head}-${tail}${bl.slice(1)}`, note:`${b} 不重读时 h 常脱落，和前面的辅音连在一起（可选）`};
+      } else if(s.type==="V"){
+        const t = f.ph==="t";
+        const before = a.replace(/'/g,"").replace(/e$/,"").slice(-2,-1);
+        if(f.ph==="r") L = {cls:"cv", kind:"r 连读", hint:`${head}-${tail}${bl}`, note:"词尾 r 和后面元音连起来"};
+        else if(t && (/[aeiour]/.test(before) || /ght$/.test(a)) && !/n't$/.test(a))
+          L = {cls:"cv", kind:"辅元连读", hint:`${head}-${tail}${bl}`, note:`美式口语里 t 常弱化成轻快的 d：${head}-d${bl}`};
+        else L = {cls:"cv", kind:"辅元连读", hint:`${head}-${tail}${bl}`, note:"词尾辅音直接拼到下一个词的元音上"};
+      } else if(s.ph==="j" && ["t","d","s","z"].includes(f.ph)){
+        const map = {t:"ch", d:"j", s:"sh", z:"zh"};
+        const ipa = {t:"/tʃ/", d:"/dʒ/", s:"/ʃ/", z:"/ʒ/"};
+        const rest = bl.replace(/^you/,"u").replace(/^y/,"");
+        L = {cls:"as", kind:"音的同化", hint:`${head}-${map[f.ph]}${rest}`, note:`/${f.ph}/ + /j/ 融合成 ${ipa[f.ph]}`};
+      } else if(PAIR[f.ph] && PAIR[f.ph]===PAIR[s.ph]){
+        L = {cls:"lp", kind:"同音合并", hint:`${head}(${tail})‿${bl}`, note:`相同或相近的辅音只发一次，稍微拖长`};
+      } else if(STOPS.has(f.ph) && STOPS.has(s.ph)){
+        L = {cls:"lp", kind:"失去爆破", hint:`${head}(${tail})‿${bl}`, note:`/${f.ph}/ 只做口型、不送气，紧接着发 /${s.ph}/`};
+      } else if(STOPS.has(f.ph) && !["h","w","j"].includes(s.ph)){
+        L = {cls:"lp", kind:"不完全爆破", hint:`${head}(${tail})‿${bl}`, note:`/${f.ph}/ 轻收不爆破，直接过渡到下一个音`};
+      }
+    } else if(s.type==="V"){
+      if(a==="the") L = {cls:"vv", kind:"元音过渡", hint:`thee-(y)${bl}`, note:"the 在元音前读 /ði/，中间带一点 /j/"};
+      else if(f.glide==="j") L = {cls:"vv", kind:"元音过渡", hint:`${a}-(y)${bl}`, note:"两个元音之间自然滑出一个轻的 /j/"};
+      else if(f.glide==="w") L = {cls:"vv", kind:"元音过渡", hint:`${a}-(w)${bl}`, note:"两个元音之间自然滑出一个轻的 /w/"};
+      else L = {cls:"vv", kind:"元音连读", hint:`${a}‿${bl}`, note:"两个元音连贯滑过去，不要停顿"};
+    }
+    if(L){ L.i = i; L.a = A.raw.replace(/[^A-Za-z'’]/g,""); L.b = B.raw.replace(/[^A-Za-z'’]/g,""); links.push(L); }
+  }
+  return links;
+}
+
+/* ---------------- 页面状态 ---------------- */
+let tokens = [], links = [];
+const input = $("#input");
+
+function renderSentence(){
+  tokens = tokenize(input.value);
+  links = detectLinks(tokens);
+  const byI = new Map(links.map(l => [l.i, l]));
+  let html = "";
+  tokens.forEach((t, i) => {
+    html += `<span class="w">${esc(t.raw)}</span>`;
+    if(i < tokens.length-1){
+      const l = byI.get(i);
+      html += l ? `<span class="lk c-${l.cls}" title="${esc(l.kind)}">‿</span>` : " ";
+    }
+  });
+  $("#display").innerHTML = html || `<span class="hint">请输入英文句子</span>`;
+  const list = $("#linkList");
+  list.innerHTML = links.length ? links.map((l, k) => `
+    <li>
+      <div class="pair c-${l.cls}">${esc(l.a)}‿${esc(l.b)}</div>
+      <div class="grow">
+        <span class="kind c-${l.cls}">${esc(l.kind)}</span>
+        <div class="hint">读作 <b>${esc(l.hint)}</b> · ${esc(l.note)}</div>
+      </div>
+      <button class="mini" data-say="${k}" aria-label="播放">▶</button>
+    </li>`).join("") : `<li class="hint">这句没有检测到明显的连读点，换一句试试。</li>`;
+  $("#result").hidden = true;
+}
+
+function renderPresets(){
+  const box = $("#presets");
+  box.innerHTML = PRESETS.map((p, i) => `<button class="chip" data-i="${i}">${esc(p)}</button>`).join("");
+  box.addEventListener("click", e => {
+    const b = e.target.closest(".chip"); if(!b) return;
+    input.value = PRESETS[+b.dataset.i];
+    box.querySelectorAll(".chip").forEach(c => c.classList.toggle("on", c === b));
+    renderSentence();
+  });
+}
+
+/* ---------------- 示范朗读 ---------------- */
+let voices = [];
+const store = {
+  get(k){ try{ return localStorage.getItem("linking:" + k); }catch(_){ return null; } },
+  set(k, v){ try{ localStorage.setItem("linking:" + k, v); }catch(_){} }
+};
+// 美音发音人打分：神经网络 / 高音质优先
+function voiceScore(v){
+  let s = 0;
+  if(/natural|neural|online/i.test(v.name)) s += 50;
+  if(/premium/i.test(v.name)) s += 45;
+  if(/enhanced|优化/i.test(v.name)) s += 35;
+  if(/aria|jenny|guy|ava|zoe|evan|allison|samantha|nicky|tom|susan|joelle|nathan/i.test(v.name)) s += 15;
+  if(/google/i.test(v.name)) s += 20;
+  if(v.localService === false) s += 3;
+  if(/novelty|bells|bubbles|bad news|good news|boing|cellos|whisper|zarvox|trinoids|wobble|organ|jester|superstar|albert|fred|junior|ralph|kathy|bahh/i.test(v.name)) s -= 100;
+  return s;
+}
+function loadVoices(){
+  if(!("speechSynthesis" in window)) return;
+  const all = speechSynthesis.getVoices();
+  let us = all.filter(v => /^en[-_]US/i.test(v.lang));
+  if(!us.length) us = all.filter(v => /^en/i.test(v.lang));
+  voices = us.sort((a, b) => voiceScore(b) - voiceScore(a));
+  const sel = $("#voice");
+  const saved = store.get("voice");
+  sel.innerHTML = voices.length
+    ? voices.map((v, i) => `<option value="${i}">${i === 0 ? "★ " : ""}${esc(v.name.replace(/^Microsoft\s+/,"").replace(/\s*-\s*English \(United States\)/,""))}${/^en[-_]US/i.test(v.lang) ? "" : " (" + esc(v.lang) + ")"}</option>`).join("")
+    : `<option>系统默认（未找到美音）</option>`;
+  const idx = voices.findIndex(v => v.name === saved);
+  if(voices.length) sel.value = String(idx >= 0 ? idx : 0);
+}
+function speed(){ return +$("#speed").value; }
+function say(text, rateOverride, onend){
+  if(!("speechSynthesis" in window)){ setStatus("这个浏览器不支持朗读示范。", true); return; }
+  try{
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "en-US";
+    const v = voices[+$("#voice").value]; if(v) u.voice = v;
+    u.rate = rateOverride || speed();
+    if(onend){ u.onend = onend; u.onerror = onend; }
+    speechSynthesis.speak(u);
+  }catch(e){ setStatus("示范朗读不可用：" + e.message, true); }
+}
+function playMine(){
+  const a = $("#mine"); if(!a.src) return;
+  a.playbackRate = speed();
+  try{ a.preservesPitch = true; a.webkitPreservesPitch = true; }catch(_){}
+  a.currentTime = 0; a.play().catch(()=>{});
+}
+function setSpeed(v){
+  v = Math.min(1.5, Math.max(0.5, +v));
+  $("#speed").value = v;
+  $("#speedVal").textContent = v.toFixed(2) + "×";
+  document.querySelectorAll("[data-sp]").forEach(c => c.classList.toggle("on", Math.abs(+c.dataset.sp - v) < 0.001));
+  const a = $("#mine"); if(a.src) a.playbackRate = v;
+  store.set("speed", String(v));
+}
+
+/* ---------------- 录音 + 语音识别 ---------------- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let stream = null, recorder = null, chunks = [], recorderDone = null, recognizer = null, recognitionDone = null;
+let recording = false, recTimer = null, recStart = 0, lastInterim = "";
+
+function setStatus(msg, err){ const s = $("#status"); s.textContent = msg; s.classList.toggle("err", !!err); }
+
+function pickMime(){
+  if(!window.MediaRecorder) return null;
+  for(const m of ["audio/webm;codecs=opus","audio/mp4","audio/webm","audio/ogg"]) if(MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) return m;
+  return "";
+}
+
+async function startRec(){
+  if(!tokens.length){ setStatus("先输入一句英文。", true); return; }
+  const keep = $("#keepAudio").checked;
+  stream = null; recorder = null; chunks = [];
+  if(keep){
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder){
+      setStatus("当前环境不能直接录音。请用 Safari / Chrome 打开本页，或用手机录好后点「上传录音」。", true); return;
+    }
+    try{
+      stream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true, noiseSuppression:true}});
+    }catch(e){
+      setStatus("没法使用麦克风（" + (e.name || e.message) + "）。请在浏览器里允许麦克风；如果是在 App 内预览，请改用浏览器打开，或录好音后点「上传录音」。", true);
+      return;
+    }
+  } else if(!SR){
+    setStatus("这个浏览器不支持语音识别，请勾选「同时保存录音」。", true); return;
+  }
+  try{ speechSynthesis && speechSynthesis.cancel(); }catch(_){}
+  if(stream){
+    const mime = pickMime();
+    recorder = mime ? new MediaRecorder(stream, {mimeType:mime}) : new MediaRecorder(stream);
+    recorder.ondataavailable = e => { if(e.data && e.data.size) chunks.push(e.data); };
+    recorderDone = new Promise(res => recorder.onstop = res);
+    recorder.start();
+  } else recorderDone = Promise.resolve();
+  recognitionDone = startRecognition();
+  recording = true; recStart = Date.now();
+  const btn = $("#recBtn"); btn.textContent = "■ 停止"; btn.classList.add("rec"); btn.classList.remove("primary");
+  $("#live").textContent = "";
+  setStatus("录音中… 读完整句后点「停止」。");
+  recTimer = setInterval(() => {
+    const s = (Date.now() - recStart) / 1000;
+    if(s > 30) stopRec();
+  }, 250);
+}
+
+function startRecognition(){
+  if(!SR) return Promise.resolve({unsupported:true});
+  return new Promise(resolve => {
+    let r;
+    try{ r = new SR(); }catch(e){ resolve({error:"unsupported"}); return; }
+    r.lang = "en-US"; r.continuous = true; r.interimResults = true; r.maxAlternatives = 3;
+    let finals = [], confs = [], err = null;
+    lastInterim = "";
+    r.onresult = e => {
+      finals = []; confs = []; let interim = "";
+      for(let i=0; i<e.results.length; i++){
+        const res = e.results[i];
+        if(res.isFinal){
+          let best = res[0], bestScore = -1;
+          for(let k=0; k<res.length; k++){
+            const sc = lcsLen(targetNorm().map(x=>x.t), normalize(res[k].transcript));
+            if(sc > bestScore){ bestScore = sc; best = res[k]; }
+          }
+          finals.push(best.transcript.trim());
+          if(best.confidence > 0) confs.push(best.confidence);
+        } else interim += res[0].transcript;
+      }
+      lastInterim = interim.trim();
+      $("#live").textContent = (finals.join(" ") + " " + interim).trim();
+    };
+    r.onerror = e => { err = e.error; };
+    r.onend = () => {
+      const text = finals.join(" ").trim() || lastInterim;
+      resolve({text, confidence: confs.length ? confs.reduce((a,b)=>a+b,0)/confs.length : 0, error: text ? null : err});
+    };
+    try{ r.start(); recognizer = r; }catch(e){ resolve({error:"start-failed"}); }
+  });
+}
+
+async function stopRec(){
+  if(!recording) return;
+  recording = false; clearInterval(recTimer);
+  const btn = $("#recBtn"); btn.textContent = "● 开始录音"; btn.classList.remove("rec"); btn.classList.add("primary");
+  setStatus("分析中…");
+  try{ recorder && recorder.state !== "inactive" && recorder.stop(); }catch(_){}
+  try{ recognizer && recognizer.stop(); }catch(_){}
+  const timeout = new Promise(res => setTimeout(() => res({text:lastInterim, timeout:true}), 3500));
+  const [, rec] = await Promise.all([recorderDone, Promise.race([recognitionDone || Promise.resolve({unsupported:true}), timeout])]);
+  stream && stream.getTracks().forEach(t => t.stop());
+  recognizer = null;
+  let blob = null;
+  if(recorder && chunks.length){
+    blob = new Blob(chunks, {type: recorder.mimeType || "audio/webm"});
+    setMyAudio(blob);
+  }
+  await analyze(blob, rec);
+  if(rec && rec.error === "audio-capture" && $("#keepAudio").checked)
+    setStatus("这台设备不能同时录音和识别。取消勾选「同时保存录音」再试，就能得到识别打分。", true);
+}
+
+function setMyAudio(blob){
+  const a = $("#mine");
+  if(a.dataset.url) URL.revokeObjectURL(a.dataset.url);
+  const url = URL.createObjectURL(blob);
+  a.src = url; a.dataset.url = url;
+  $("#playMine").disabled = false;
+  $("#playBoth").disabled = false;
+  a.playbackRate = speed();
+}
+
+/* ---------------- 文本比对 ---------------- */
+const CONTR = [[/\bwon't\b/g,"will not"],[/\bcan't\b/g,"can not"],[/\bcannot\b/g,"can not"],[/\bshan't\b/g,"shall not"],
+  [/n't\b/g," not"],[/'m\b/g," am"],[/'re\b/g," are"],[/'ve\b/g," have"],[/'ll\b/g," will"],[/'d\b/g," would"],[/'s\b/g," is"],
+  [/\bgonna\b/g,"going to"],[/\bwanna\b/g,"want to"],[/\bgotta\b/g,"got to"]];
+const DIGITS = {"0":"zero","1":"one","2":"two","3":"three","4":"four","5":"five","6":"six","7":"seven","8":"eight","9":"nine","10":"ten"};
+const HOMO = [["to","too","two"],["for","four"],["right","write"],["there","their"],["i","eye"],["you","u"],["know","no"],["hear","here"],
+  ["see","sea"],["by","buy","bye"],["meet","meat"],["piece","peace"],["tea","t"],["whole","hole"],["one","won"],["our","hour"],["a","uh"]];
+const HOMO_MAP = new Map(); HOMO.forEach((g, i) => g.forEach(w => HOMO_MAP.set(w, i)));
+const same = (a, b) => a === b || (HOMO_MAP.has(a) && HOMO_MAP.get(a) === HOMO_MAP.get(b));
+
+function normalize(text){
+  let s = " " + text.toLowerCase().replace(/[’‘]/g,"'") + " ";
+  for(const [re, rep] of CONTR) s = s.replace(re, rep);
+  return s.split(/[^a-z0-9']+/).map(x => x.replace(/'/g,"")).filter(Boolean).map(x => DIGITS[x] || x);
+}
+function targetNorm(){
+  const out = [];
+  tokens.forEach((t, wi) => normalize(t.raw).forEach(n => out.push({t:n, wi})));
+  return out;
+}
+function lcsTable(a, b){
+  const n = a.length, m = b.length;
+  const dp = Array.from({length:n+1}, () => new Int16Array(m+1));
+  for(let i=n-1; i>=0; i--) for(let j=m-1; j>=0; j--)
+    dp[i][j] = same(a[i], b[j]) ? dp[i+1][j+1] + 1 : Math.max(dp[i+1][j], dp[i][j+1]);
+  return dp;
+}
+function lcsLen(a, b){ return lcsTable(a, b)[0][0]; }
+function align(a, b){
+  const dp = lcsTable(a, b), match = new Array(a.length).fill(-1);
+  let i = 0, j = 0;
+  while(i < a.length && j < b.length){
+    if(same(a[i], b[j])){ match[i] = j; i++; j++; }
+    else if(dp[i+1][j] >= dp[i][j+1]) i++; else j++;
+  }
+  return match;
+}
+
+/* ---------------- 音频分析 ---------------- */
+async function decode(blob){
+  const ab = await blob.arrayBuffer();
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  const ctx = new Ctx();
+  try{
+    return await new Promise((res, rej) => {
+      const p = ctx.decodeAudioData(ab, res, rej);
+      if(p && p.then) p.then(res, rej);
+    });
+  } finally { try{ ctx.close(); }catch(_){} }
+}
+
+function audioStats(buf){
+  const data = buf.getChannelData(0), sr = buf.sampleRate;
+  const hop = Math.round(sr * 0.02);
+  const db = [];
+  for(let i=0; i+hop <= data.length; i+=hop){
+    let s = 0; for(let k=i; k<i+hop; k++) s += data[k]*data[k];
+    db.push(10*Math.log10(s/hop + 1e-12));
+  }
+  if(db.length < 5) return null;
+  const sorted = [...db].sort((a,b)=>a-b);
+  const pct = p => sorted[Math.min(sorted.length-1, Math.floor(p*sorted.length))];
+  const floor = pct(0.1), peak = pct(0.98);
+  const thr = Math.max(floor + 10, peak - 32);
+  let voiced = db.map(v => v > thr);
+  // 去掉过短的“有声”毛刺（<60ms）
+  for(let i=0; i<voiced.length;){
+    if(!voiced[i]){ i++; continue; }
+    let j = i; while(j < voiced.length && voiced[j]) j++;
+    if(j - i < 3) for(let k=i; k<j; k++) voiced[k] = false;
+    i = j;
+  }
+  const first = voiced.indexOf(true), last = voiced.lastIndexOf(true);
+  if(first < 0) return {db, thr, voiced, empty:true};
+  const gaps = [];
+  for(let i=first; i<=last;){
+    if(voiced[i]){ i++; continue; }
+    let j = i; while(j <= last && !voiced[j]) j++;
+    const dur = (j - i) * 0.02;
+    if(dur >= 0.22) gaps.push({start:i, end:j, dur});
+    i = j;
+  }
+  const span = (last - first + 1) * 0.02;
+  const gapTotal = gaps.reduce((a,g)=>a+g.dur, 0);
+  // 每个停顿之前累计的有声时长（用来按音节比例估位置）
+  gaps.forEach(g => { g.before = (g.start - first) * 0.02 - gaps.filter(h => h.end <= g.start).reduce((a,h)=>a+h.dur,0); });
+  return {db, thr, voiced, first, last, gaps, span, speech: span - gapTotal, peak, floor};
+}
+
+function syllables(w){
+  w = w.replace(/'/g,"");
+  let n = (w.match(/[aeiouy]+/g) || []).length;
+  if(/[^aeiouyl]e$/.test(w) && n > 1) n--;
+  if(/[^aeiouy]le$/.test(w)) n = Math.max(n, 2);
+  return Math.max(1, n);
+}
+
+function locateGap(g, st){
+  const syl = tokens.map(t => syllables(t.w));
+  const total = syl.reduce((a,b)=>a+b, 0);
+  const pos = g.before / Math.max(0.01, st.speech) * total;
+  let cum = 0, best = 0, bestD = Infinity;
+  for(let i=0; i<tokens.length-1; i++){
+    cum += syl[i];
+    const d = Math.abs(cum - pos);
+    if(d < bestD){ bestD = d; best = i; }
+  }
+  return best; // 停顿在 tokens[best] 和 tokens[best+1] 之间
+}
+
+function drawWave(st){
+  const cv = $("#wave"), dpr = window.devicePixelRatio || 1;
+  const W = cv.clientWidth * dpr, H = cv.clientHeight * dpr;
+  cv.width = W; cv.height = H;
+  const g = cv.getContext("2d");
+  g.clearRect(0,0,W,H);
+  if(!st) return;
+  const css = getComputedStyle(document.documentElement);
+  const pad = Math.max(0, st.first - 10), end = Math.min(st.db.length, st.last + 11);
+  const n = end - pad, bw = W / n;
+  const lo = st.floor, hi = st.peak + 3;
+  g.fillStyle = css.getPropertyValue("--bad").trim();
+  g.globalAlpha = 0.16;
+  st.gaps.forEach(gp => g.fillRect((gp.start - pad)*bw, 0, (gp.end - gp.start)*bw, H));
+  g.globalAlpha = 1;
+  g.fillStyle = css.getPropertyValue("--accent").trim();
+  for(let i=0; i<n; i++){
+    const v = st.db[pad + i];
+    const h = Math.max(1, (v - lo) / (hi - lo) * (H*0.9));
+    g.globalAlpha = st.voiced[pad+i] ? 0.9 : 0.25;
+    g.fillRect(i*bw, (H - h)/2, Math.max(1, bw - dpr*0.5), h);
+  }
+  g.globalAlpha = 1;
+  g.fillStyle = css.getPropertyValue("--bad").trim();
+  g.font = `${12*dpr}px sans-serif`; g.textAlign = "center";
+  st.gaps.forEach(gp => g.fillText(gp.dur.toFixed(2)+"s", ((gp.start+gp.end)/2 - pad)*bw, 14*dpr));
+}
+
+/* ---------------- 综合分析 ---------------- */
+async function analyze(blob, rec){
+  rec = rec || {unsupported:true};
+  let st = null;
+  if(blob){ try{ st = audioStats(await decode(blob)); }catch(e){ st = null; } }
+
+  const hasRecog = !!(rec.text && rec.text.trim());
+  const res = $("#result"); res.hidden = false;
+
+  // 1) 识别比对
+  const tn = targetNorm();
+  const wordOk = tokens.map(() => true);
+  let matchIdx = [], accuracy = null;
+  $("#recogBlock").hidden = false;
+  if(hasRecog){
+    const heardTok = normalize(rec.text);
+    matchIdx = align(tn.map(x=>x.t), heardTok);
+    tn.forEach((x, k) => { if(matchIdx[k] < 0) wordOk[x.wi] = false; });
+    accuracy = Math.round(100 * matchIdx.filter(v => v >= 0).length / Math.max(1, tn.length));
+    $("#heard").textContent = "“" + rec.text + "”" + (rec.confidence ? `（置信度 ${Math.round(rec.confidence*100)}%）` : "");
+    $("#compare").innerHTML = tokens.map((t, i) => `<span class="${wordOk[i] ? "m-ok" : "m-no"}">${esc(t.raw)}</span>`).join(" ");
+  } else {
+    const why = rec.unsupported ? "（上传模式或浏览器不支持语音识别，只做停顿分析）"
+      : rec.error === "network" ? "（语音识别需要联网，当前连不上识别服务）"
+      : rec.error === "not-allowed" || rec.error === "service-not-allowed" ? "（浏览器不允许语音识别）"
+      : rec.error === "audio-capture" ? "（麦克风被录音占用，这台设备不能同时录音和识别）"
+      : "（没听清，换个安静的地方、离麦克风近一点再试）";
+    $("#heard").textContent = "没有识别结果 " + why;
+    $("#compare").innerHTML = "";
+  }
+
+  // 2) 停顿
+  const gapAt = new Map();
+  let extraPauses = 0, rateSyl = null;
+  if(st && !st.empty){
+    st.gaps.forEach(g => {
+      const i = locateGap(g, st);
+      g.at = i; g.punct = tokens[i] && tokens[i].punct;
+      if(!g.punct){ extraPauses++; gapAt.set(i, g); }
+    });
+    const totalSyl = tokens.reduce((a,t)=>a+syllables(t.w), 0);
+    rateSyl = totalSyl / Math.max(0.3, st.speech);
+    $("#rateTag").textContent = `语速约 ${rateSyl.toFixed(1)} 音节/秒 · 用时 ${st.span.toFixed(1)}s`;
+    drawWave(st);
+    $("#pauseText").innerHTML = st.gaps.length
+      ? st.gaps.map(g => `${g.punct ? "✓" : "✗"} 约 ${g.dur.toFixed(2)}s 停顿，大约在 <b>${esc(tokens[g.at].raw)}</b> 和 <b>${esc(tokens[g.at+1].raw)}</b> 之间${g.punct ? "（标点处，正常）" : ""}`).join("<br>")
+      : "整句中间没有明显停顿 👍";
+  } else {
+    drawWave(null);
+    $("#rateTag").textContent = "";
+    $("#pauseText").textContent = !blob ? "没有保存录音，跳过停顿分析。" : st && st.empty ? "录音里几乎没有声音，检查一下麦克风。" : "这段录音无法解码，换个格式（m4a / mp3 / wav）再试。";
+  }
+
+  // 3) 连读点
+  let pass = 0;
+  const items = links.map(l => {
+    const reasons = [];
+    if(hasRecog){
+      if(!wordOk[l.i] || !wordOk[l.i+1]) reasons.push("这两个词没被听对");
+      else {
+        const ka = tn.map((x,k)=>x.wi===l.i?k:-1).filter(k=>k>=0).pop();
+        const kb = tn.findIndex(x => x.wi === l.i+1);
+        if(matchIdx[kb] - matchIdx[ka] > 1) reasons.push("中间多出了别的音");
+      }
+    }
+    const g = gapAt.get(l.i);
+    if(g) reasons.push(`中间断开约 ${g.dur.toFixed(2)}s`);
+    const ok = reasons.length === 0;
+    if(ok) pass++;
+    l.ok = ok; l.reasons = reasons;
+    return l;
+  });
+  $("#linkCheck").innerHTML = items.length ? items.map((l, k) => `
+    <li>
+      <div class="pair ${l.ok ? "ok" : "no"}">${l.ok ? "✓" : "✗"} ${esc(l.a)}‿${esc(l.b)}</div>
+      <div class="grow"><div class="hint">${l.ok ? "连上了" : esc(l.reasons.join("；"))} · 读作 <b>${esc(l.hint)}</b></div></div>
+      <button class="mini" data-say="${k}" aria-label="播放">▶</button>
+    </li>`).join("") : `<li class="hint">这句没有连读点。</li>`;
+
+  // 4) 分数
+  const fluency = st && !st.empty ? Math.max(0, 100 - extraPauses*20 - (rateSyl < 2.2 ? 20 : rateSyl < 3 ? 8 : 0)) : null;
+  const setTile = (id, v, suffix) => {
+    const el = $(id);
+    el.textContent = v === null ? "—" : v + (suffix || "");
+    el.className = "n " + (v === null ? "" : (typeof v === "number" ? (v >= 85 ? "ok" : v >= 60 ? "mid" : "no") : ""));
+  };
+  setTile("#sAcc", accuracy);
+  setTile("#sFlu", fluency);
+  const linkEl = $("#sLink");
+  linkEl.textContent = links.length ? `${pass}/${links.length}` : "—";
+  linkEl.className = "n " + (links.length ? (pass === links.length ? "ok" : pass >= links.length/2 ? "mid" : "no") : "");
+
+  // 5) 建议
+  const tips = [];
+  const bad = items.filter(l => !l.ok);
+  bad.slice(0, 3).forEach(l => tips.push(`<b>${esc(l.a)}‿${esc(l.b)}</b>：${esc(l.note)}，练成 <b>${esc(l.hint)}</b>。先单独点 ▶ 听几遍，再放回整句。`));
+  if(extraPauses && !bad.length) tips.push("句子中间有多余的停顿，试着一口气读完一个意群。");
+  if(rateSyl && rateSyl < 2.5) tips.push(`语速偏慢（${rateSyl.toFixed(1)} 音节/秒）。一个词一个词地读很难连起来——先用「慢速」跟读示范，熟了再换「中速」「正常」。`);
+  if(rateSyl && rateSyl > 6.5) tips.push("语速很快，注意别把词吞掉：快不等于连读，每个词的核心元音还是要清楚。");
+  if(hasRecog && accuracy !== null && accuracy < 70) tips.push("机器有不少词没听对，先放慢、把每个词读准，再练连读。");
+  if(!tips.length) tips.push("连得很顺！可以换成「正常」语速再挑战，或换一句更长的。");
+  $("#tips").innerHTML = tips.map(t => `<li>${t}</li>`).join("");
+
+  setStatus("分析完成。可以点「我的录音」和示范对比着听。");
+  res.scrollIntoView({behavior:"smooth", block:"start"});
+}
+
+/* ---------------- 事件 ---------------- */
+input.addEventListener("input", renderSentence);
+$("#playModel").addEventListener("click", () => say(input.value));
+$("#playBoth").addEventListener("click", () => say(input.value, null, () => setTimeout(playMine, 350)));
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-say]"); if(b){ const l = links[+b.dataset.say]; if(l) say(`${l.a} ${l.b}`, Math.min(speed(), 0.8)); return; }
+  const sp = e.target.closest("[data-sp]"); if(sp) setSpeed(sp.dataset.sp);
+});
+$("#speed").addEventListener("input", e => setSpeed(e.target.value));
+$("#voice").addEventListener("change", () => { const v = voices[+$("#voice").value]; if(v) store.set("voice", v.name); say("Hi, I'm here to help you practice.", null); });
+$("#keepAudio").addEventListener("change", e => store.set("keepAudio", e.target.checked ? "1" : "0"));
+$("#recBtn").addEventListener("click", () => recording ? stopRec() : startRec());
+$("#playMine").addEventListener("click", playMine);
+$("#file").addEventListener("change", async e => {
+  const f = e.target.files && e.target.files[0]; if(!f) return;
+  if(!tokens.length){ setStatus("先输入你录音里读的那句英文。", true); return; }
+  setStatus("分析上传的录音…");
+  setMyAudio(f);
+  $("#live").textContent = "";
+  await analyze(f, {unsupported:true});
+  e.target.value = "";
+});
+setSpeed(store.get("speed") || 0.8);
+if(store.get("keepAudio") === "0") $("#keepAudio").checked = false;
+if("serviceWorker" in navigator && location.protocol === "https:"){
+  navigator.serviceWorker.register("sw.js").catch(()=>{});
+}
+
+if("speechSynthesis" in window){ loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; }
+else { $("#voice").innerHTML = "<option>此浏览器不支持朗读</option>"; }
+if(!SR) setStatus("提示：这个浏览器不支持语音识别，录音后只做停顿分析。建议用 Chrome 或 Edge。");
+
+renderPresets();
+input.value = PRESETS[0];
+document.querySelector(".chip").classList.add("on");
+renderSentence();
+</script>
+</body>
+</html>
