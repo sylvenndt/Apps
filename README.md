@@ -2,4 +2,4 @@
 
 个人手机小工具合集：https://sylvenndt.github.io/apps/
 
-- [英语连读练习](https://sylvenndt.github.io/apps/linking-practice/)
+- [每日美语（连读、听力、口语）](https://sylvenndt.github.io/apps/linking-practice/)
