@@ -332,11 +332,36 @@ const PATTERNS = [
   { id:"p55", l:"C1", p:"As far as I'm concerned, …", zh:"在我看来……；就我而言……", ex:[["As far as I'm concerned, it's a waste of time.","在我看来，这是浪费时间。"],["As far as I know, the meeting's still on.","据我所知，会议照常。"]] },
   { id:"p56", l:"C1", p:"The way I see it, …", zh:"照我看……", ex:[["The way I see it, we don't have a choice.","照我看，我们别无选择。"],["The way I see it, it's a win-win.","照我看，这是双赢。"]] },
   { id:"p57", l:"C1", p:"It goes without saying (that)…", zh:"不用说……；不言而喻", ex:[["It goes without saying that safety comes first.","不用说，安全第一。"],["It goes without saying, you're invited.","不用说，你肯定在邀请之列。"]] },
-  { id:"p58", l:"C1", p:"Be that as it may, …", zh:"尽管如此……", ex:[["Be that as it may, we still need a plan.","尽管如此，我们还是需要一个计划。"],["It's expensive. Be that as it may, it's worth it.","是很贵，但即便如此也值得。"]] }
+  { id:"p58", l:"C1", p:"Be that as it may, …", zh:"尽管如此……", ex:[["Be that as it may, we still need a plan.","尽管如此，我们还是需要一个计划。"],["It's expensive. Be that as it may, it's worth it.","是很贵，但即便如此也值得。"]] },
+  { id:"p59", l:"B1", p:"I'm (not) sure if / that…", zh:"我（不）确定……", ex:[["I'm not sure if I can make it.","我不确定能不能来。"],["I'm pretty sure he's joking.","我很确定他在开玩笑。"]] },
+  { id:"p60", l:"B1", p:"Why don't we / you…?", zh:"我们／你何不……？（提建议）", ex:[["Why don't we order pizza tonight?","今晚我们点披萨吧？"],["Why don't you take a day off?","你干嘛不休一天假？"]] },
+  { id:"p61", l:"B1", p:"How about + doing / How about we…?", zh:"……怎么样？要不……？", ex:[["How about meeting at six?","六点见怎么样？"],["How about we just stay in?","要不我们就待在家吧？"]] },
+  { id:"p62", l:"B1", p:"Let's not…", zh:"我们别……了", ex:[["Let's not talk about work.","别聊工作了。"],["Let's not make a big deal out of it.","别把这事搞得太大了。"]] },
+  { id:"p63", l:"B1", p:"It's (not) easy to…", zh:"做……（不）容易", ex:[["It's not easy to make friends here.","在这儿交朋友不容易。"],["It's easy to get lost in this city.","在这个城市很容易迷路。"]] },
+  { id:"p64", l:"B1", p:"I have trouble + doing", zh:"我……有困难；我很难……", ex:[["I have trouble sleeping lately.","我最近睡不好。"],["She has trouble remembering names.","她总记不住别人的名字。"]] },
+  { id:"p65", l:"B1", p:"I'm (not) into…", zh:"我（不）喜欢……；我（不）感兴趣", ex:[["I'm really into hiking these days.","我最近特别喜欢徒步。"],["I'm not really into horror movies.","我不太喜欢恐怖片。"]] },
+  { id:"p66", l:"B1", p:"What do you think of / about…?", zh:"你觉得……怎么样？", ex:[["What do you think of my new haircut?","你觉得我的新发型怎么样？"],["What do you think about moving to Tokyo?","你觉得搬去东京怎么样？"]] },
+  { id:"p67", l:"B1", p:"Is it okay if I…?", zh:"我……可以吗？", ex:[["Is it okay if I sit here?","我坐这儿可以吗？"],["Is it okay if I bring a friend?","我带个朋友去可以吗？"]] },
+  { id:"p68", l:"B1", p:"I'm sorry to hear (that)…", zh:"听到……我很难过（表示同情）", ex:[["I'm sorry to hear that you're sick.","听说你病了，我很难过。"],["I'm so sorry to hear about your dad.","听说你爸爸的事，我很难过。"]] },
+  { id:"p69", l:"B1", p:"It's time to / for…", zh:"该……了", ex:[["It's time to go home.","该回家了。"],["It's time for a change.","该做点改变了。"]] },
+  { id:"p70", l:"B1", p:"There's no need to…", zh:"没必要……；不用……", ex:[["There's no need to apologize.","没必要道歉。"],["There's no need to rush.","不用着急。"]] },
+  { id:"p71", l:"B2", p:"I didn't mean to…", zh:"我不是故意……", ex:[["I didn't mean to hurt your feelings.","我不是故意伤你的心。"],["Sorry, I didn't mean to interrupt.","抱歉，我不是有意打断你。"]] },
+  { id:"p72", l:"B2", p:"I can't believe…", zh:"真不敢相信……", ex:[["I can't believe it's already Friday.","真不敢相信已经周五了。"],["I can't believe you remembered!","真不敢相信你还记得！"]] },
+  { id:"p73", l:"B2", p:"(It's) no wonder…", zh:"难怪……", ex:[["No wonder you're tired. You worked all night.","难怪你累了，你干了一整晚。"],["It's no wonder she's upset.","难怪她不高兴。"]] },
+  { id:"p74", l:"B2", p:"I'm not in the mood for / to…", zh:"我没心情……", ex:[["I'm not in the mood for a party.","我没心情去派对。"],["I'm not in the mood to argue.","我没心情吵架。"]] },
+  { id:"p75", l:"B2", p:"You might want to…", zh:"你或许应该……（委婉建议）", ex:[["You might want to bring a jacket.","你最好带件外套。"],["You might want to double-check that.","你可能得再核对一下。"]] },
+  { id:"p76", l:"B2", p:"It never hurts to…", zh:"……总没坏处", ex:[["It never hurts to ask.","问一问总没坏处。"],["It never hurts to have a backup plan.","有个备选方案总没坏处。"]] },
+  { id:"p77", l:"B2", p:"I could use…", zh:"我很需要……", ex:[["I could really use a coffee right now.","我现在真的很需要一杯咖啡。"],["I could use some help with this.","这个我需要点帮助。"]] },
+  { id:"p78", l:"B2", p:"I'm on the fence about…", zh:"我对……拿不定主意", ex:[["I'm on the fence about buying a new phone.","买不买新手机我拿不定主意。"],["We're still on the fence about the trip.","这次旅行我们还没决定去不去。"]] },
+  { id:"p79", l:"B2", p:"Speaking of…", zh:"说到……（自然转换话题）", ex:[["Speaking of food, I'm starving.","说到吃的，我快饿死了。"],["Speaking of which, did you call your mom?","说起这个，你给你妈打电话了吗？"]] },
+  { id:"p80", l:"B2", p:"It's not like…", zh:"又不是……", ex:[["It's not like I have a choice.","又不是我能选的。"],["It's not like it's the end of the world.","又不是天塌下来了。"]] },
+  { id:"p81", l:"B2", p:"I'd be lying if I said…", zh:"要说……那是假的", ex:[["I'd be lying if I said I wasn't nervous.","要说我不紧张那是假的。"],["I'd be lying if I said I didn't miss it.","要说我不想念那是假的。"]] },
+  { id:"p82", l:"C1", p:"For what it's worth, …", zh:"不管有没有用，我想说……", ex:[["For what it's worth, I think you did the right thing.","不管怎样，我觉得你做得对。"],["For what it's worth, I'm on your side.","说句不知有没有用的话，我站在你这边。"]] },
+  { id:"p83", l:"C1", p:"…, not to mention…", zh:"……，更别提……", ex:[["It's expensive, not to mention really far.","很贵，更别提还特别远。"],["He's smart, not to mention super kind.","他很聪明，更不用说人还特别好。"]] }
 ];
 
 /* 高频句式（语法结构） */
-const STRUCTURES = [
+const OTHER_STRUCTURES = [
   { id:"g01", l:"B1", p:"If + 现在时, … will…", zh:"真实条件句：很可能发生的情况", ex:[["If you need anything, just let me know.","有需要就跟我说。"],["If it rains, we'll stay inside.","如果下雨，我们就待在屋里。"]] },
   { id:"g02", l:"B1", p:"If + 过去式, … would…", zh:"虚拟现在：与现在事实相反的假设", ex:[["If I had more money, I'd travel the world.","要是我有更多钱，我会去环游世界。"],["What would you do if you won the lottery?","如果你中了彩票，你会做什么？"]] },
   { id:"g03", l:"B2", p:"If + had done, … would have done", zh:"虚拟过去：与过去事实相反的假设", ex:[["If I'd known, I would've come earlier.","要是我早知道，我就早点来了。"],["If we hadn't left early, we would've missed the flight.","要不是我们早出发，就赶不上飞机了。"]] },
@@ -363,19 +388,66 @@ const STRUCTURES = [
   { id:"g24", l:"B1", p:"Doing… 作主语", zh:"动名词作主语，谈论一件事本身", ex:[["Learning a language takes time.","学一门语言需要时间。"],["Working from home has its pros and cons.","在家办公有利有弊。"]] }
 ];
 
+
+/* 五大基本句型 + 三大从句 */
+const BASIC_STRUCTURES = [
+  { id:"b01", g:"five", l:"B1", p:"主语 + 谓语（S + V）", zh:"句子最简单的骨架：动词后面不需要宾语", ex:[["My phone died.","我手机没电了。"],["Prices went up again.","物价又涨了。"]] },
+  { id:"b02", g:"five", l:"B1", p:"主语 + 系动词 + 表语（S + V + C）", zh:"用 be、look、feel、seem、get、sound、taste 等系动词描述主语的状态或身份", ex:[["You look tired.","你看起来很累。"],["This soup tastes amazing.","这汤太好喝了。"]] },
+  { id:"b03", g:"five", l:"B1", p:"主语 + 谓语 + 宾语（S + V + O）", zh:"最常用的句型：及物动词后面接宾语", ex:[["I love this song.","我超爱这首歌。"],["She's learning Japanese.","她在学日语。"]] },
+  { id:"b04", g:"five", l:"B1", p:"主语 + 谓语 + 间接宾语 + 直接宾语（S + V + O + O）", zh:"双宾语：先说给谁，再说给什么。常用 give、send、show、tell、buy、lend", ex:[["Can you send me the file?","你能把文件发给我吗？"],["My dad bought me a bike.","我爸给我买了辆自行车。"]] },
+  { id:"b05", g:"five", l:"B1", p:"主语 + 谓语 + 宾语 + 宾语补足语（S + V + O + C）", zh:"宾补说明宾语的状态或身份。常用 make、keep、leave、find、call", ex:[["The news made me so happy.","这个消息让我特别开心。"],["Just leave the door open.","门开着就行。"]] },
+  { id:"n01", g:"noun", l:"B2", p:"主语从句", zh:"从句充当主语。常用 what、whether、that 开头，也常用 it 作形式主语放到句首", ex:[["What you said really helped.","你说的话真的很有帮助。"],["It's obvious that he likes you.","很明显他喜欢你。"]] },
+  { id:"n02", g:"noun", l:"B1", p:"宾语从句", zh:"从句充当宾语。口语里 that 经常省略；用 if、whether 表示“是否”", ex:[["I think it's a great idea.","我觉得这是个好主意。"],["Do you know if she's coming?","你知道她来不来吗？"]] },
+  { id:"n03", g:"noun", l:"B2", p:"表语从句", zh:"从句放在 be 后面作表语，说明主语是什么", ex:[["The problem is that we're out of time.","问题是我们没时间了。"],["That's exactly what I meant.","这正是我的意思。"]] },
+  { id:"n04", g:"noun", l:"B2", p:"同位语从句", zh:"从句解释前面名词（fact、idea、news、feeling）的具体内容", ex:[["I had a feeling that something was wrong.","我有种感觉，好像出事了。"],["The fact that he lied really bothers me.","他撒谎这件事真的让我很不舒服。"]] },
+  { id:"a01", g:"attr", l:"B1", p:"定语从句：who / that 修饰人", zh:"关系词在从句里作主语时不能省略", ex:[["I have a friend who lives in LA.","我有个朋友住在洛杉矶。"],["She's the one that called earlier.","她就是之前打电话的那个人。"]] },
+  { id:"a02", g:"attr", l:"B1", p:"定语从句：which / that 修饰物", zh:"关系词作宾语时，口语里经常直接省略", ex:[["Is this the book you were talking about?","这就是你说的那本书吗？"],["The car that I rented broke down.","我租的那辆车坏了。"]] },
+  { id:"a03", g:"attr", l:"B1", p:"定语从句：where / when 修饰地点、时间", zh:"where 修饰地点，when 修饰时间", ex:[["That's the restaurant where we had our first date.","那就是我们第一次约会的餐厅。"],["I still remember the day when we met.","我还记得我们相遇的那天。"]] },
+  { id:"a04", g:"attr", l:"B2", p:"定语从句：whose 表示“……的”", zh:"whose 后面接名词，表示所属关系", ex:[["I met a guy whose brother plays in the NBA.","我认识了一个人，他哥哥在 NBA 打球。"],["That's the neighbor whose dog never stops barking.","就是那个邻居，他家的狗叫个不停。"]] },
+  { id:"a05", g:"attr", l:"B2", p:"非限定性定语从句（, which / , who）", zh:"用逗号隔开，只做补充说明；which 还可以指前面整件事", ex:[["We went to Kyoto, which was beautiful.","我们去了京都，那里很美。"],["My boss, who's usually calm, totally lost it.","我老板平时很冷静，这次彻底失控了。"]] },
+  { id:"d01", g:"adv", l:"B1", p:"时间状语从句（when / while / until / before / after）", zh:"说明事情发生的时间。从句里用现在时表示将来", ex:[["Text me when you get home.","到家了给我发个消息。"],["I'll wait here until you're done.","我在这儿等你弄完。"]] },
+  { id:"d02", g:"adv", l:"B1", p:"条件状语从句（if / unless / as long as）", zh:"说明在什么条件下", ex:[["If you're free, let's grab lunch.","你有空的话，一起吃午饭吧。"],["We'll be fine as long as we leave now.","只要现在出发，我们就没问题。"]] },
+  { id:"d03", g:"adv", l:"B1", p:"原因状语从句（because / since / as）", zh:"说明原因。since 常表示“既然”", ex:[["I stayed home because I wasn't feeling well.","我待在家是因为不太舒服。"],["Since you're here, can you help me with this?","既然你来了，能帮我弄一下这个吗？"]] },
+  { id:"d04", g:"adv", l:"B2", p:"让步状语从句（although / even though / even if）", zh:"“虽然、即使”，主句里不再用 but", ex:[["Although it was late, we kept talking.","虽然很晚了，我们还是一直在聊。"],["I'm going even if it rains.","就算下雨我也要去。"]] },
+  { id:"d05", g:"adv", l:"B2", p:"目的状语从句（so that / so）", zh:"说明“为了、以便”", ex:[["I left early so I wouldn't miss the train.","我早点出门，免得赶不上火车。"],["Speak up so everyone can hear you.","大声点，让大家都能听到。"]] },
+  { id:"d06", g:"adv", l:"B2", p:"结果状语从句（so … that / such … that）", zh:"“太……以至于……”。so 后接形容词，such 后接名词短语", ex:[["I was so tired that I fell asleep on the couch.","我累得在沙发上睡着了。"],["It was such a nice day that we went to the beach.","天气太好了，我们就去了海边。"]] },
+  { id:"d07", g:"adv", l:"B1", p:"比较状语从句（than / as … as）", zh:"把两件事放在一起比较", ex:[["It took longer than I expected.","花的时间比我预想的长。"],["Come as soon as you can.","你能多快来就多快来。"]] },
+  { id:"d08", g:"adv", l:"B2", p:"地点状语从句（where / wherever）", zh:"说明在哪里", ex:[["Put it back where you found it.","从哪儿拿的就放回哪儿去。"],["You can sit wherever you like.","你想坐哪儿就坐哪儿。"]] },
+  { id:"d09", g:"adv", l:"B2", p:"方式状语从句（as / as if / like）", zh:"说明“像……一样、好像……”", ex:[["Do it the way I showed you.","照我教你的那样做。"],["You look like you haven't slept in days.","你看起来像好几天没睡了。"]] }
+];
+const STRUCT_GROUPS = [["five", "五大基本句型"], ["noun", "名词性从句"], ["attr", "定语从句"], ["adv", "状语从句"], ["other", "其他高频句式"]];
+const STRUCTURES = [...BASIC_STRUCTURES, ...OTHER_STRUCTURES.map(x => ({ ...x, g: "other" }))];
+
 /* 转成可复习的卡片 */
 const LEVELS = ["B1", "B2", "C1"];
 const wslug = w => w.toLowerCase().replace(/[^a-z]+/g, "-");
-const VOCAB = VOCAB_RAW.map(([w, l, t, zh, ex]) => ({ id: "v-" + wslug(w), w, l, t, zh, ex }));
+const LVFIX = typeof HAND_LEVEL_FIX !== "undefined" ? HAND_LEVEL_FIX : {};
+const VOCAB = VOCAB_RAW.map(([w, l, t, zh, ex]) => ({ id: "v-" + wslug(w), w, l: LVFIX[w] || l, t, zh, ex }));
 const EXTRA_CARDS = {};
 VOCAB.forEach(v => { EXTRA_CARDS[v.id] = { id: v.id, scene: "vocab", en: v.ex, chunks: [v.ex], zh: `${v.w}：${v.zh}`, reply: "", word: v.w, level: v.l, note: `${v.w}（${VOCAB_TYPES[v.t]}）${v.zh}` }; });
 [[PATTERNS, "pattern"], [STRUCTURES, "structure"]].forEach(([list, kind]) => list.forEach(p => p.ex.forEach(([en, zh], k) => {
   const id = `${p.id}-${k}`;
   EXTRA_CARDS[id] = { id, scene: kind, en, chunks: [en], zh, reply: "", pattern: p.p, level: p.l, note: `${kind === "pattern" ? "句型" : "句式"}：${p.p}，${p.zh}` };
 })));
-const PATTERN_CARDS = Object.values(EXTRA_CARDS).filter(c => c.scene === "pattern" || c.scene === "structure");
+const PATTERN_CARDS = [...BASIC_STRUCTURES, ...PATTERNS, ...OTHER_STRUCTURES].flatMap(p => p.ex.map((_, k) => EXTRA_CARDS[`${p.id}-${k}`]));
 Object.assign(SCENE_BY_KEY, {
   vocab: { key: "vocab", name: "高频词汇", en: "Vocabulary", mark: "V", color: "var(--teal)", virtual: true },
   pattern: { key: "pattern", name: "高频句型", en: "Sentence patterns", mark: "P", color: "var(--indigo)", virtual: true },
   structure: { key: "structure", name: "高频句式", en: "Grammar structures", mark: "G", color: "var(--violet)", virtual: true }
 });
+
+/* 全部词汇：精选口语词（带例句）+ CEFR 词表 */
+const POS_ZH = { n: "名词", v: "动词", a: "形容词", d: "副词", p: "介词", c: "连词", det: "限定词", pron: "代词", int: "感叹词", num: "数词" };
+const WORD_CATS = [["v", "动词"], ["n", "名词"], ["a", "形容词"], ["d", "副词"], ["phr", "短语动词"], ["o", "其他"]];
+const ALL_WORDS = [];
+VOCAB.forEach(v => ALL_WORDS.push({ id: v.id, w: v.w, l: v.l, cat: v.t === "p" ? "phr" : v.t === "l" ? "d" : v.t === "a" && /ly$/.test(v.w) ? "d" : v.t, pos: VOCAB_TYPES[v.t], zh: v.zh, ex: v.ex, hand: true }));
+(typeof WORDS_RAW !== "undefined" ? WORDS_RAW : []).forEach(([w, l, pos, zh]) => {
+  const id = "w-" + wslug(w);
+  if(EXTRA_CARDS[id]) return;
+  const first = pos.split("/")[0];
+  const posZh = pos.split("/").map(p => POS_ZH[p] || p).join("、");
+  const meaning = zh.replace(/^[a-z]+\.\s*/, "");
+  ALL_WORDS.push({ id, w, l, cat: ["v", "n", "a", "d"].includes(first) ? first : "o", pos: posZh, zh, ex: null });
+  EXTRA_CARDS[id] = { id, scene: "vocab", en: w, chunks: [w], zh: `${w}：${zh}`, reply: "", word: w, level: l, single: true, meaning: zh, posZh, note: `${w}（${posZh}）${zh}` };
+});
+ALL_WORDS.sort((a, b) => LEVELS.indexOf(a.l) - LEVELS.indexOf(b.l));

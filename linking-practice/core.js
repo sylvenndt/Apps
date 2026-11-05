@@ -13,7 +13,7 @@ const store = {
 };
 
 const Settings = {
-  defaults: { speed: 0.9, voice: "", reactSec: 8, apiKey: "", model: "claude-sonnet-5-5", keepAudio: true, reviewMode: "listen", focus: [], newPerDay: 10, mix: { scenes: true, vocab: true, pattern: true }, startLevel: "B1" },
+  defaults: { speed: 0.9, voice: "", reactSec: 8, apiKey: "", model: "claude-sonnet-5-5", keepAudio: true, reviewMode: "listen", focus: [], newPerDay: 10, newWordsPerDay: 15, mix: { scenes: true, vocab: true, pattern: true }, startLevel: "B1" },
   get(k){ const s = store.get("settings", {}); return k in s ? s[k] : this.defaults[k]; },
   set(k, v){ const s = store.get("settings", {}); s[k] = v; store.set("settings", s); }
 };
@@ -78,8 +78,14 @@ const SRS = {
     else s[id].due = Math.min(s[id].due, due);
     store.set("srs", s);
   },
-  newIntroducedToday(){ const n = store.get("newToday", {}); return n.day === dayKey() ? n.count : 0; },
-  markNew(){ const c = this.newIntroducedToday() + 1; store.set("newToday", { day: dayKey(), count: c }); },
+  newIntroducedToday(){ const n = store.get("newToday", {}); return n.day === dayKey() ? (n.count || 0) : 0; },
+  newWordsToday(){ const n = store.get("newToday", {}); return n.day === dayKey() ? (n.words || 0) : 0; },
+  markNew(id){
+    const n = store.get("newToday", {}), today = n.day === dayKey();
+    const rec = { day: dayKey(), count: today ? (n.count || 0) : 0, words: today ? (n.words || 0) : 0 };
+    if(/^[vw]-/.test(id)) rec.words++; else rec.count++;
+    store.set("newToday", rec);
+  },
   dueIds(){
     const s = this.all(), end = endOfToday();
     return Object.entries(s).filter(([id, c]) => c.due <= end && Cards.get(id)).sort((a, b) => a[1].due - b[1].due).map(([id]) => id);
@@ -87,7 +93,7 @@ const SRS = {
   newIds(limit){
     const s = this.all();
     const room = Math.max(0, limit - this.newIntroducedToday());
-    if(!room) return [];
+    const wordRoom = Math.max(0, Settings.get("newWordsPerDay") - this.newWordsToday());
     const mix = Settings.get("mix"), lv = LEVELS.indexOf(Settings.get("startLevel"));
     const sources = [];
     if(mix.scenes !== false){
@@ -106,11 +112,19 @@ const SRS = {
       sources.push(out);
     }
     const byLevel = list => LEVELS.slice(Math.max(0, lv)).concat(LEVELS.slice(0, Math.max(0, lv))).flatMap(L => list.filter(x => x.level === L));
-    if(mix.vocab !== false) sources.push(byLevel(Object.values(EXTRA_CARDS).filter(c => c.scene === "vocab")).filter(c => !s[c.id]).slice(0, room).map(c => c.id));
     if(mix.pattern !== false) sources.push(byLevel(PATTERN_CARDS).filter(c => !s[c.id]).slice(0, room).map(c => c.id));
     const out = [];
     for(let i = 0; out.length < room && sources.some(x => i < x.length); i++)
       for(const src of sources){ if(i < src.length && out.length < room) out.push(src[i]); }
+    if(mix.vocab !== false && wordRoom){
+      const order = LEVELS.slice(Math.max(0, lv)).concat(LEVELS.slice(0, Math.max(0, lv)));
+      const words = [];
+      for(const L of order){ for(const w of ALL_WORDS){ if(w.l === L && !s[w.id]){ words.push(w.id); if(words.length >= wordRoom) break; } } if(words.length >= wordRoom) break; }
+      // 单词和句子交错排列，避免连续一长串单词
+      const merged = []; let a = 0, b = 0;
+      while(a < out.length || b < words.length){ if(a < out.length) merged.push(out[a++]); if(b < words.length) merged.push(words[b++]); if(b < words.length) merged.push(words[b++]); }
+      return merged;
+    }
     return out;
   },
   forecast(days){
@@ -145,7 +159,7 @@ const SRS = {
       c.reps++; c.ivl = ivl; c.due = startOfDay(ivl);
     }
     s[id] = c; store.set("srs", s);
-    if(isNew) this.markNew();
+    if(isNew) this.markNew(id);
   }
 };
 

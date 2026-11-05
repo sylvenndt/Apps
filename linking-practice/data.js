@@ -210,13 +210,86 @@ SCENES.push(
   ]}
 );
 
+SCENES.push(
+  { key:"gym", name:"健身运动", en:"Gym & sports", mark:"E", color:"var(--mint)", items:[
+    ["Are you | using this machine?", "这台器械你在用吗？", "Nope, it's all yours."],
+    ["Mind if I | work in | with you?", "介意我跟你轮流用吗？", "Sure, go ahead."],
+    ["How many sets | do you have left?", "你还剩几组？", "Just one more."],
+    ["I'm so sore | from yesterday.", "昨天练完我浑身酸痛。", "Same. Leg day is brutal."],
+    ["Do you wanna | go for a run | this weekend?", "这周末想一起去跑步吗？", "Sure, how about Saturday morning?"],
+    ["I'm trying | to get back | in shape.", "我在努力恢复身材。", "Good for you! Consistency is key."],
+    ["What time | does the gym | close?", "健身房几点关门？", "We're open until ten tonight."],
+    ["Can you | spot me?", "能帮我保护一下吗？", "Sure, I've got you."],
+    ["I'm totally | out of breath.", "我喘不上气了。", "Take a break and grab some water."],
+    ["Who's | playing | tonight?", "今晚谁跟谁比赛？", "The Lakers and the Celtics."]
+  ]},
+  { key:"home", name:"租房居家", en:"Home & renting", mark:"U", color:"var(--sand)", items:[
+    ["When is | the rent due?", "房租什么时候交？", "On the first of every month."],
+    ["Are utilities | included?", "水电费包含在内吗？", "Water's included, but you pay for electricity."],
+    ["The sink | is clogged | again.", "水槽又堵了。", "I'll call the plumber tomorrow morning."],
+    ["Can I have | some friends over | this weekend?", "这周末我能请几个朋友来家里吗？", "Sure, just keep it down after ten."],
+    ["Whose turn is it | to take out | the trash?", "轮到谁倒垃圾了？", "I think it's yours this week."],
+    ["Could you | turn the music down | a bit?", "能把音乐调小一点吗？", "Oh, sorry! I didn't realize it was that loud."],
+    ["Is it okay | if I use | the kitchen?", "我可以用一下厨房吗？", "Of course, help yourself."],
+    ["We're out of | toilet paper.", "卫生纸用完了。", "I'll grab some on my way home."],
+    ["The lease | is up | in June.", "租约六月到期。", "Are you planning to renew?"],
+    ["When can I | move in?", "我什么时候能搬进来？", "The place will be ready on the fifteenth."]
+  ]},
+  { key:"bank", name:"银行办事", en:"Bank & errands", mark:"$", color:"var(--plum)", items:[
+    ["I'd like to | open an account.", "我想开个账户。", "Sure. Do you have two forms of ID?"],
+    ["I need to | send a package | to Japan.", "我要寄个包裹到日本。", "Would you like to send it express?"],
+    ["Is there an ATM | around here?", "附近有 ATM 吗？", "There's one inside the grocery store."],
+    ["My card | got declined.", "我的卡被拒了。", "Let me try running it again."],
+    ["How long | will it take | to arrive?", "多久能到？", "About five to seven business days."],
+    ["I'd like to | deposit | this check.", "我想存这张支票。", "Sure, just sign the back for me."],
+    ["Do I need | an appointment?", "需要预约吗？", "No, walk-ins are welcome."],
+    ["What are | your hours?", "你们的营业时间是？", "We're open nine to five, Monday through Friday."],
+    ["Is there | a fee | for that?", "这个要手续费吗？", "No, it's free for account holders."],
+    ["I think | I lost | my credit card.", "我的信用卡好像丢了。", "Let's cancel it and order you a new one."]
+  ]},
+  { key:"grocery", name:"超市外卖", en:"Groceries & delivery", mark:"M", color:"var(--rose)", items:[
+    ["Where can I | find | the eggs?", "鸡蛋在哪儿？", "Aisle seven, next to the milk."],
+    ["Paper | or plastic?", "要纸袋还是塑料袋？", "Paper, please."],
+    ["Do you have | a rewards card?", "你有会员卡吗？", "No, but can I sign up?"],
+    ["Is this | on sale | this week?", "这个这周打折吗？", "Yeah, it's buy one, get one free."],
+    ["My order | is missing | an item.", "我的订单少了一样东西。", "Sorry about that. We'll send you a refund."],
+    ["Can you | leave it | at the door?", "能放在门口吗？", "Sure, I'll text you when it's there."],
+    ["Do you | deliver | to this area?", "你们送这一片吗？", "Yes, delivery's free over thirty-five dollars."],
+    ["I think I'll | order takeout | tonight.", "我今晚想点外卖。", "Good idea. Get me some noodles too."],
+    ["Is this | fresh?", "这个新鲜吗？", "Yeah, it just came in this morning."],
+    ["Can I | get a receipt?", "能给我小票吗？", "It's in the bag."]
+  ]}
+);
+
+/* 各场景补充的高频说法（追加在原有句子之后，原句编号不变） */
+const MORE_ITEMS = {
+  cafe: [["Could I get | an extra shot | of espresso?", "能多加一份浓缩吗？", "Sure, that's an extra seventy-five cents."], ["Sorry, could you | make it | a little hotter?", "不好意思，能做得再烫一点吗？", "Of course, I'll remake it for you."], ["Do you have | anything | without caffeine?", "有不含咖啡因的吗？", "We have herbal teas and hot chocolate."], ["Can I | pay | with my phone?", "能用手机付吗？", "Yep, just tap it on the reader."]],
+  dining: [["Do you have | any vegetarian | options?", "有素食的选择吗？", "Yes, they're marked with a little leaf."], ["How spicy | is this dish?", "这道菜有多辣？", "It's got a little kick, but it's not too hot."], ["I think | we're ready | to order.", "我们可以点菜了。", "Great, what can I get you?"], ["Could we get | a few more | napkins?", "能再给几张餐巾纸吗？", "Sure, here you go."]],
+  shop: [["Can I | try this on?", "这个能试穿吗？", "Of course, the fitting rooms are in the back."], ["Do you have | a smaller | size?", "有小一号的吗？", "Let me take a look for you."], ["How much | is this one?", "这个多少钱？", "That one's forty-nine ninety-nine."], ["Can you | hold this for me | until tomorrow?", "能帮我留到明天吗？", "Sure, I can hold it until closing tomorrow."]],
+  health: [["I've been | feeling dizzy | lately.", "我最近总是头晕。", "How long has this been going on?"], ["Do I need | a prescription | for this?", "买这个需要处方吗？", "No, it's over the counter."], ["I think | I sprained | my ankle.", "我好像扭到脚踝了。", "Let's get some ice on it."], ["Is it | anything serious?", "严重吗？", "No, you'll be fine in a few days."]],
+  work: [["Can I | pick your brain | for a sec?", "能请教你一下吗？", "Sure, what's on your mind?"], ["I'll | keep you | posted.", "有进展我随时告诉你。", "Thanks, I appreciate it."], ["Let's | take this | offline.", "这个我们会后单独聊。", "Good idea. I'll ping you after."], ["I'm | swamped | this week.", "我这周忙疯了。", "Do you need me to take anything off your plate?"]],
+  talk: [["How's | everything | going?", "一切都还好吗？", "Can't complain. How about you?"], ["What's new | with you?", "你最近有什么新鲜事？", "Not a whole lot, honestly."], ["Crazy weather | we're having, | huh?", "最近天气真怪，是吧？", "I know! It was hot yesterday and freezing today."], ["Are you doing | anything fun | this weekend?", "这周末有什么好玩的安排吗？", "I might go hiking if the weather's nice."]],
+  plans: [["Does Friday | work | for you?", "周五你方便吗？", "Friday's perfect."], ["Let's just | play it | by ear.", "到时候看情况吧。", "Sounds good, just text me."], ["I'm running | about ten minutes | behind.", "我大概会晚十分钟。", "No worries, I'll grab us a table."], ["Can I | take | a rain check?", "这次先算了，改天行吗？", "Of course. Maybe next week?"]],
+  travel: [["Can I leave | my bags here | after checkout?", "退房后能把行李寄存在这儿吗？", "Sure, we'll keep them behind the desk."], ["The Wi-Fi | in my room | isn't working.", "我房间的 Wi-Fi 不能用。", "Sorry about that. I'll send someone up."], ["Could I get | a wake-up call | at six?", "能六点叫醒我吗？", "Absolutely, six a.m. it is."], ["Are there | any good places | to eat nearby?", "附近有好吃的地方吗？", "There's a great taco place down the street."]],
+  fly: [["Is there | a direct | flight?", "有直飞的航班吗？", "There's one tomorrow morning at nine."], ["How much | is the fee | for an extra bag?", "多一件行李要多少钱？", "It's thirty-five dollars per bag."], ["Where's | the baggage | claim?", "行李提取处在哪儿？", "Just follow the signs downstairs."], ["We're | about to | board.", "我们快登机了。", "Okay, text me when you land."]],
+  ride: [["Is this | the right way | to the museum?", "这是去博物馆的路吗？", "Yep, just keep going straight."], ["How much | is a ticket | to the airport?", "到机场的票多少钱？", "It's twelve fifty one way."], ["Could you | take | the highway?", "能走高速吗？", "Sure, it'll be faster this time of day."], ["Does this bus | stop | at Main Street?", "这辆公交在 Main Street 停吗？", "Yeah, it's the third stop."]],
+  bar: [["What do you | have | on tap?", "你们有什么生啤？", "We've got a lager, an IPA, and a stout."], ["Can I get the check | when you | get a chance?", "你有空的时候能帮我结账吗？", "Sure, I'll be right back."], ["I'm | a little | buzzed.", "我有点微醺了。", "Maybe switch to water for a bit."], ["Do you guys | have | happy hour?", "你们有欢乐时光优惠吗？", "Yep, half-price drinks until seven."]],
+  chat: [["That's a cute dog. | What's | his name?", "你的狗好可爱，叫什么名字？", "Thanks! His name's Biscuit."], ["Are you | from | around here?", "你是本地人吗？", "Not originally, but I've lived here a few years."], ["Have you | been here | before?", "你以前来过这儿吗？", "A couple of times. The food's great."], ["What brings you | here | tonight?", "今晚怎么来这儿了？", "My friend dragged me out, actually."]],
+  date: [["I've been wanting | to ask you out | for a while.", "我想约你出去很久了。", "Really? I was hoping you would."], ["Want to | get dinner | sometime this week?", "这周找时间一起吃个晚饭？", "Yeah, I'd really like that."], ["You're | really easy | to talk to.", "跟你聊天很舒服。", "I feel the same way about you."], ["Let me | walk you | home.", "我送你回家吧。", "That's sweet. Sure."]],
+  phone: [["Who's | calling, | please?", "请问您是哪位？", "This is Leo from the marketing team."], ["Sorry, I think | I have | the wrong number.", "抱歉，我好像打错了。", "No problem. Have a good day."], ["I'm about to | lose | signal.", "我这边快没信号了。", "Okay, call me when you can."], ["Is now | a good time | to talk?", "现在方便说话吗？", "Actually, can I call you back in ten?"]],
+  fix: [["The heater | in my room | isn't working.", "我房间的暖气坏了。", "I'm sorry. I'll have maintenance come up."], ["I was told | it would be ready | today.", "之前说好今天就能好的。", "Let me check on that for you."], ["Could you | look into it | for me?", "能帮我查一下吗？", "Sure, give me a few minutes."], ["This is | the third time | it's happened.", "这已经是第三次了。", "I completely understand your frustration."]],
+  react: [["That's | wild!", "太离谱了！", "Right? I couldn't believe it."], ["Makes | sense.", "说得通。", "Yeah, I figured you'd get it."], ["I'm so | happy | for you!", "真为你高兴！", "Thanks, it means a lot."], ["That's | a good | point.", "你说得有道理。", "Thanks. I've been thinking about it a lot."]],
+  party: [["Who else | is | coming?", "还有谁会来？", "Just a few people from work."], ["I brought | some | snacks.", "我带了点零食。", "Oh, you didn't have to!"], ["This place | looks | amazing!", "这地方布置得太漂亮了！", "Thanks, we just finished decorating."], ["Cheers | to | that!", "为此干杯！", "Cheers!"]]
+};
+SCENES.forEach(s => { if(MORE_ITEMS[s.key]) s.items.push(...MORE_ITEMS[s.key]); });
+
 /* 场景分类 */
 const CATS = [
-  { key:"daily", name:"日常生活", scenes:["cafe","dining","shop","health"] },
+  { key:"daily", name:"日常生活", scenes:["cafe","dining","shop","grocery","health","home","gym"] },
   { key:"travel", name:"旅行出行", scenes:["travel","fly","ride"] },
   { key:"social", name:"社交搭讪", scenes:["talk","chat","bar","party","react","plans"] },
   { key:"date", name:"约会调情", scenes:["date"] },
-  { key:"comm", name:"工作沟通", scenes:["work","phone","fix"] }
+  { key:"comm", name:"工作沟通", scenes:["work","phone","fix","bank"] }
 ];
 SCENES.forEach(s => { s.cat = (CATS.find(c => c.scenes.includes(s.key)) || CATS[0]).key; });
 
@@ -262,6 +335,14 @@ TOPICS.push(
   { scene:"work", title:"跟新同事介绍自己", them:"New colleague", opener:"Hi! I'm new here. What do you do?", opener_zh:"你好！我是新来的。你是做什么的？", brief:"新同事问你负责什么。简单介绍你的职位、主要做什么，以及之后可能会怎么合作。", hints:["I'm in charge of…", "I mostly work on…", "We'll probably be working together on…"] },
   { scene:"react", title:"听到大新闻", them:"Friend", opener:"Okay, you're not gonna believe this. Jake quit his job to travel the world!", opener_zh:"跟你说，你肯定不信。Jake 辞职去环游世界了！", brief:"朋友告诉你一个惊人的消息。给出自然的反应，再追问细节。", hints:["No way!", "Are you serious?", "Where's he going first?"] },
   { scene:"shop", title:"请店员推荐礼物", them:"Clerk", opener:"Hi there! Looking for anything in particular?", opener_zh:"你好！在找什么特别的东西吗？", brief:"你想给朋友买生日礼物，预算 50 美元左右。请店员推荐，再问能不能帮忙包装。", hints:["I'm looking for a gift", "around fifty bucks", "Could you gift-wrap it?"] }
+);
+TOPICS.push(
+  { scene:"gym", title:"健身房借器械", them:"Gym member", brief:"你想用的器械有人在用。礼貌地问对方还要多久，能不能轮流用。", hints:["How many sets do you have left?", "Mind if I work in?", "No rush"] },
+  { scene:"home", title:"跟室友商量家务", them:"Roommate", brief:"你觉得最近家务都是你在做。心平气和地跟室友商量一下怎么分工。", hints:["Can we talk about…", "I feel like…", "How about we take turns?"] },
+  { scene:"home", title:"看房提问", them:"Landlord", opener:"So this is the living room. What do you think?", opener_zh:"这是客厅，你觉得怎么样？", brief:"你在看一套出租公寓。问房东租金包含什么、押金多少、什么时候能搬进来。", hints:["Are utilities included?", "How much is the deposit?", "When can I move in?"] },
+  { scene:"bank", title:"信用卡被盗刷", them:"Bank rep", opener:"Thanks for calling. How can I help you today?", opener_zh:"感谢来电，今天有什么可以帮你？", brief:"你发现信用卡上有几笔不是你刷的消费。打给银行说明情况，要求冻结卡片并补办新卡。", hints:["I noticed some charges I didn't make", "freeze my card", "send me a new one"] },
+  { scene:"grocery", title:"外卖送错了", them:"Support", opener:"Hi! What seems to be the problem with your order?", opener_zh:"你好！你的订单有什么问题？", brief:"你点的外卖送错了：少了一杯饮料，主食也不是你点的。联系客服，要求退款或者重新配送。", hints:["I got the wrong order", "It's missing…", "Could I get a refund?"] },
+  { scene:"talk", title:"电梯里聊天气", them:"Neighbor", opener:"Can you believe this weather?", opener_zh:"这天气你敢信吗？", brief:"邻居在电梯里跟你聊天气。自然地接话，再顺便聊两句周末计划。", hints:["I know, right?", "It's been crazy", "Any plans for the weekend?"] }
 );
 TOPICS.forEach(t => { t.cat = SCENE_CAT_OF(t.scene); });
 function SCENE_CAT_OF(k){ const c = CATS.find(c => c.scenes.includes(k)); return c ? c.key : "daily"; }
