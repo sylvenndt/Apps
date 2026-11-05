@@ -1,6 +1,6 @@
 # sylvenndt/apps
 
-Personal phone apps (PWAs) for the owner, published via GitHub Pages at https://sylvenndt.github.io/apps/ (branch `main`, root).
+Personal phone apps (PWAs) for the owner, published via GitHub Pages at https://sylvenndt.github.io/Apps/ (branch `main`, root).
 
 Conventions:
 - Each app lives in its own folder (`<app-slug>/`) with its own `index.html`, `manifest.json` (start_url/scope `./`), icons and optional `sw.js`, so it can be added to the home screen on its own.
