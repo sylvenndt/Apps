@@ -13,7 +13,7 @@ const store = {
 };
 
 const Settings = {
-  defaults: { speed: 0.9, voice: "", newPerDay: 8, reactSec: 8, apiKey: "", model: "claude-sonnet-5-5", keepAudio: true, reviewMode: "listen", focus: [] },
+  defaults: { speed: 0.9, voice: "", reactSec: 8, apiKey: "", model: "claude-sonnet-5-5", keepAudio: true, reviewMode: "listen", focus: [], newPerDay: 10, mix: { scenes: true, vocab: true, pattern: true }, startLevel: "B1" },
   get(k){ const s = store.get("settings", {}); return k in s ? s[k] : this.defaults[k]; },
   set(k, v){ const s = store.get("settings", {}); s[k] = v; store.set("settings", s); }
 };
@@ -64,6 +64,7 @@ const Cards = {
   get(id){
     const lib = ALL_ITEMS.find(x => x.id === id);
     if(lib) return lib;
+    if(typeof EXTRA_CARDS !== "undefined" && EXTRA_CARDS[id]) return EXTRA_CARDS[id];
     const u = this.user().find(x => x.id === id);
     return u ? { ...u, chunks: [u.en], reply: "", scene: "mine" } : null;
   }
@@ -84,21 +85,32 @@ const SRS = {
     return Object.entries(s).filter(([id, c]) => c.due <= end && Cards.get(id)).sort((a, b) => a[1].due - b[1].due).map(([id]) => id);
   },
   newIds(limit){
-    const s = this.all(), out = [];
+    const s = this.all();
     const room = Math.max(0, limit - this.newIntroducedToday());
-    if(!room) return out;
-    const focus = Settings.get("focus").filter(k => SCENE_BY_KEY[k]);
-    const rounds = list => {
-      const maxLen = Math.max(...list.map(x => x.items.length));
-      for(let i = 0; i < maxLen && out.length < room; i++)
-        for(const sc of list){
-          const id = `${sc.key}-${i}`;
-          if(i < sc.items.length && !s[id] && !out.includes(id)) out.push(id);
-          if(out.length >= room) break;
-        }
-    };
-    if(focus.length) rounds(focus.map(k => SCENE_BY_KEY[k]));
-    if(out.length < room) rounds(SCENES);
+    if(!room) return [];
+    const mix = Settings.get("mix"), lv = LEVELS.indexOf(Settings.get("startLevel"));
+    const sources = [];
+    if(mix.scenes !== false){
+      const out = [], focus = Settings.get("focus").filter(k => SCENE_BY_KEY[k] && !SCENE_BY_KEY[k].virtual);
+      const rounds = list => {
+        const maxLen = Math.max(...list.map(x => x.items.length));
+        for(let i = 0; i < maxLen && out.length < room; i++)
+          for(const sc of list){
+            const id = `${sc.key}-${i}`;
+            if(i < sc.items.length && !s[id] && !out.includes(id)) out.push(id);
+            if(out.length >= room) break;
+          }
+      };
+      if(focus.length) rounds(focus.map(k => SCENE_BY_KEY[k]));
+      if(out.length < room) rounds(SCENES);
+      sources.push(out);
+    }
+    const byLevel = list => LEVELS.slice(Math.max(0, lv)).concat(LEVELS.slice(0, Math.max(0, lv))).flatMap(L => list.filter(x => x.level === L));
+    if(mix.vocab !== false) sources.push(byLevel(Object.values(EXTRA_CARDS).filter(c => c.scene === "vocab")).filter(c => !s[c.id]).slice(0, room).map(c => c.id));
+    if(mix.pattern !== false) sources.push(byLevel(PATTERN_CARDS).filter(c => !s[c.id]).slice(0, room).map(c => c.id));
+    const out = [];
+    for(let i = 0; out.length < room && sources.some(x => i < x.length); i++)
+      for(const src of sources){ if(i < src.length && out.length < room) out.push(src[i]); }
     return out;
   },
   forecast(days){

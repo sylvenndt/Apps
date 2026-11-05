@@ -234,3 +234,22 @@ canvas.wave{width:100%;height:92px;display:block;border-radius:12px;background:v
 .star{border:0;background:none;font-size:22px;cursor:pointer;color:var(--muted);width:40px;height:40px;flex:0 0 auto}
 .star.on{color:var(--amber)}
 .scene-items .li{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px dashed var(--rule)}
+
+/* v5 */
+.note{font-size:13px;color:var(--muted);margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--sunk)}
+.links2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.links2 .lib-link{margin-top:14px;align-items:flex-start}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);background:var(--sunk);border-radius:12px;padding:4px;gap:4px}
+.seg button{border:0;background:none;border-radius:9px;padding:9px 4px;font-weight:700;font-size:14px;cursor:pointer;color:var(--muted)}
+.seg button.on{background:var(--surface);color:var(--ink)}
+.wrow{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-top:1px solid var(--rule)}
+.wrow:first-child{border-top:0}
+.wrow .word{font-size:18px}
+.wrow .ex{margin-top:4px;font-size:15px}
+.wrow .play.sm,.wrow .icon-btn{margin-top:2px}
+.lv{font-size:11px;font-weight:800;border-radius:6px;padding:1px 6px;color:#fff;flex:0 0 auto}
+.lv-B1{background:var(--green)} .lv-B2{background:var(--blue)} .lv-C1{background:var(--purple)}
+.pcard{margin-top:12px}
+.pcard .pat{font-size:18px;line-height:1.35}
+.exrow{align-items:flex-start;margin-top:12px}
+.exrow .ex-en{font-weight:600}

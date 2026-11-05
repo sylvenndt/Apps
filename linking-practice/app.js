@@ -82,10 +82,11 @@ Views.today = {
         <div class="stat"><b>${Log.activeDays()}</b><span>练习天数</span></div>
         <div class="stat"><b>${ALL_ITEMS.length + Cards.user().length}</b><span>句库总数</span></div>
       </div>
-      <a class="lib-link" href="#library">
-        <div class="grow"><div class="t">句库</div><div class="small muted">${ALL_ITEMS.length} 句，${SCENES.length} 个场景，可以挑重点场景先学</div></div>
-        <span class="small muted">明天复习 ${SRS.forecast(1)[0]} 句</span>
-      </a>
+      <div class="links2">
+        <a class="lib-link" href="#library"><div class="grow"><div class="t">场景句库</div><div class="small muted">${ALL_ITEMS.length} 句，${SCENES.length} 个场景</div></div></a>
+        <a class="lib-link" href="#words"><div class="grow"><div class="t">词汇与句型</div><div class="small muted">B1–C1，${VOCAB.length} 词，${PATTERNS.length + STRUCTURES.length} 个句型句式</div></div></a>
+      </div>
+      <p class="small muted" style="margin-top:10px">明天要复习 ${SRS.forecast(1)[0]} 句。</p>
       <p class="small muted" style="margin-top:18px">每天按顺序走完这四站：先复习巩固，再练听力反应，然后开口表达，最后打磨发音。</p>`;
   }
 };
@@ -149,8 +150,10 @@ Views.review = {
           <button class="chip" id="rv-chunks">按意群播放</button>
           <button class="chip" id="rv-reveal">显示英文</button>
         </div>` : `
-        <p class="zh-big">${esc(card.zh)}</p>
-        <p class="small muted" style="text-align:center" id="rv-tip">用英语把这句说出来。想不起来就先说个大概。</p>
+        ${card.scene === "vocab" ? `<p class="zh-big">${esc(card.word)}</p><p class="small muted" style="text-align:center">${esc(card.note)}</p>
+        <p class="small muted" style="text-align:center;margin-top:8px" id="rv-tip">用这个词说一句你自己的话。</p>` : `<p class="zh-big">${esc(card.zh)}</p>
+        ${card.pattern ? `<p style="text-align:center"><button class="chip" id="rv-hint">看句型提示</button></p>` : ""}
+        <p class="small muted" style="text-align:center" id="rv-tip">用英语把这句说出来。想不起来就先说个大概。</p>`}
         <div class="row" style="justify-content:center;margin-top:14px"><button class="mic lg" id="rv-say" style="--c:var(--blue)" aria-label="开始说">${ICON.mic}</button></div>
         <p id="rv-said" style="text-align:center;font-weight:600;min-height:24px;margin-top:10px"></p>
         <div class="row" style="justify-content:center"><button class="chip" id="rv-reveal">看答案</button></div>`;
@@ -161,6 +164,7 @@ Views.review = {
         <div id="rv-text" hidden style="margin-top:18px">
           ${type === "speak" ? `<div class="row" style="margin-bottom:10px"><button class="play sm" id="rv-play" style="--c:var(--blue)" aria-label="播放">${ICON.play}</button><button class="chip" id="rv-slow">慢速</button><button class="chip" id="rv-chunks">按意群</button></div>` : ""}
           <div class="en">${renderEn(card.chunks)}</div>
+          ${card.note ? `<p class="note">${esc(card.note)}</p>` : ""}
           ${type === "listen" ? `<p class="zh blur" id="rv-zh" style="margin-top:6px" title="点一下显示中文">${esc(card.zh || "（没有中文）")}</p>` : `<p class="small" id="rv-cmp" style="margin-top:6px"></p>`}
           ${card.reply ? `<div class="row" style="margin-top:14px;align-items:flex-start">
             <button class="play sm" id="rv-reply" style="--c:var(--ink)" aria-label="播放回应">${ICON.play}</button>
@@ -192,6 +196,7 @@ Views.review = {
     const rp = $("#rv-reply"); if(rp) rp.onclick = () => playWith(rp, card.reply, null, true);
     const sh = $("#rv-shadow"); if(sh) sh.onclick = () => this.shadow(card);
     const say = $("#rv-say"); if(say) say.onclick = () => this.sayIt(card);
+    const hint = $("#rv-hint"); if(hint) hint.onclick = e => { e.currentTarget.outerHTML = `<b>${esc(card.pattern)}</b>`; };
     $$("#rv-grades .grade").forEach(b => b.onclick = () => this.grade(id, +b.dataset.g));
     if(type === "listen") setTimeout(() => { if(location.hash === "#review" && $("#rv-play") === play()) playWith(play(), card.en); }, 250);
   },
@@ -202,7 +207,11 @@ Views.review = {
     $("#rv-reveal").remove(); $("#rv-tip").hidden = true;
     if(type === "speak"){
       const cmp = $("#rv-cmp");
-      if(Review.said){
+      if(Review.said && card.scene === "vocab"){
+        const need = normalize(card.word), got = normalize(Review.said);
+        const used = need.every(w => got.includes(w));
+        cmp.innerHTML = used ? `<b class="ok">用上了 ${esc(card.word)}</b>。上面是参考例句，你的句子说得通就算对。` : `<b class="mid">没听到 ${esc(card.word)}</b>，试着把它用进句子里。上面是参考例句。`;
+      } else if(Review.said){
         const tgt = normalize(card.en), got = normalize(Review.said);
         const pct = Math.round(100 * lcsLen(tgt, got) / Math.max(tgt.length, got.length, 1));
         cmp.innerHTML = `和答案的重合度 <b class="${pct >= 80 ? "ok" : pct >= 50 ? "mid" : "no"}">${pct}%</b>。意思对、说法不同也没关系，记住地道的版本。`;
@@ -306,6 +315,8 @@ const Listen = { state: "setup", scene: "all", qs: [], i: 0, results: [], timer:
   hf: { list: [], i: 0, playing: false, token: 0, reps: 2, reply: true, showText: true, lock: null } };
 
 function listenPool(sel){
+  if(sel === "vocab") return Object.values(EXTRA_CARDS).filter(c => c.scene === "vocab");
+  if(sel === "patterns") return PATTERN_CARDS;
   if(sel === "learned") return Object.keys(SRS.all()).map(id => Cards.get(id)).filter(Boolean);
   if(sel.startsWith("cat:")){ const c = CATS.find(x => "cat:" + x.key === sel); return ALL_ITEMS.filter(x => c && c.scenes.includes(x.scene)); }
   if(sel === "all") return ALL_ITEMS;
@@ -314,6 +325,8 @@ function listenPool(sel){
 function poolLabel(sel){
   if(sel === "all") return "全部场景";
   if(sel === "learned") return "我学过的";
+  if(sel === "vocab") return "高频词汇例句";
+  if(sel === "patterns") return "句型句式例句";
   if(sel.startsWith("cat:")) return (CATS.find(x => "cat:" + x.key === sel) || {}).name || "";
   return (SCENE_BY_KEY[sel] || {}).name || "";
 }
@@ -357,6 +370,8 @@ Views.listen = {
       <div class="chips" id="ls-cats">
         <button class="chip${sel === "all" ? " on" : ""}" data-s="all">全部</button>
         ${CATS.map(c => `<button class="chip${sel === "cat:" + c.key ? " on" : ""}" data-s="cat:${c.key}">${esc(c.name)}</button>`).join("")}
+        <button class="chip${sel === "vocab" ? " on" : ""}" data-s="vocab">高频词汇</button>
+        <button class="chip${sel === "patterns" ? " on" : ""}" data-s="patterns">句型句式</button>
         ${learnedN ? `<button class="chip${sel === "learned" ? " on" : ""}" data-s="learned">我学过的（${learnedN}）</button>` : ""}
       </div>
       <div class="chips" id="ls-scenes" style="margin-top:8px">
@@ -391,7 +406,9 @@ Views.listen = {
       if(it.reply) types.push(["reply", 45]);
       const dv = detailVariants(it.en);
       if(dv) types.push(["detail", 35]);
-      if(multi && SCENE_BY_KEY[it.scene]) types.push(["scene", 20]);
+      if(multi && SCENE_BY_KEY[it.scene] && !SCENE_BY_KEY[it.scene].virtual) types.push(["scene", 20]);
+      if(it.word) types.push(["word", 55]);
+      if(it.pattern) types.push(["pattern", 45]);
       if(!types.length) return null;
       let r = Math.random() * types.reduce((a, t) => a + t[1], 0), type = types[0][0];
       for(const [t, w] of types){ if((r -= w) <= 0){ type = t; break; } }
@@ -400,6 +417,15 @@ Views.listen = {
         return { it, type, opts: shuffle([it.reply, ...others]), ans: it.reply };
       }
       if(type === "detail") return { it, type, opts: shuffle([it.en, ...dv]), ans: it.en };
+      if(type === "word"){
+        const v = VOCAB.find(x => x.w === it.word);
+        const pool2 = VOCAB.filter(x => x.w !== it.word && x.t === v.t);
+        return { it, type, opts: shuffle([it.word, ...shuffle(pool2).slice(0, 3).map(x => x.w)]), ans: it.word };
+      }
+      if(type === "pattern"){
+        const all = [...PATTERNS, ...STRUCTURES].map(x => x.p).filter(x => x !== it.pattern);
+        return { it, type, opts: shuffle([it.pattern, ...shuffle(all).slice(0, 3)]), ans: it.pattern };
+      }
       const others = shuffle(SCENES.filter(s => s.key !== it.scene)).slice(0, 3).map(s => s.en);
       return { it, type, opts: shuffle([SCENE_BY_KEY[it.scene].en, ...others]), ans: SCENE_BY_KEY[it.scene].en };
     }).filter(Boolean);
@@ -412,7 +438,7 @@ Views.listen = {
     if(!q){ this.finish(); return; }
     Listen.answered = false; Listen.t0 = 0;
     clearInterval(Listen.timer);
-    const prompt = { reply: "对方这样说，你会怎么回？", detail: "你听到的是哪一句？注意小词", scene: "这句话最可能在哪里听到？" }[q.type];
+    const prompt = { reply: "对方这样说，你会怎么回？", detail: "你听到的是哪一句？注意小词", scene: "这句话最可能在哪里听到？", word: "这句话里用到了哪个词？", pattern: "这句话用的是哪个句型？" }[q.type];
     $("#v-listen").innerHTML = `
       <div class="row between">
         <button class="icon-btn" id="ls-quit" aria-label="退出">${ICON.x}</button>
@@ -466,6 +492,7 @@ Views.listen = {
         <div class="en" style="font-size:20px">${renderEn(q.it.chunks)}</div>
         <p class="zh blur" id="ls-zh" style="margin-top:4px">${esc(q.it.zh)}</p>
         ${q.type !== "reply" && q.it.reply ? `<p class="small muted" style="margin-top:8px">对方可能回：<b style="color:var(--ink)">${esc(q.it.reply)}</b></p>` : ""}
+        ${q.it.note ? `<p class="note">${esc(q.it.note)}</p>` : ""}
         <div class="row" style="margin-top:12px;gap:8px">
           <button class="chip" id="ls-again">再听</button><button class="chip" id="ls-slow">慢速</button>
           <button class="chip" id="ls-save">加入复习</button>
@@ -636,29 +663,6 @@ function coachPrompt(said){
 }
 
 Views.speak = {
-  show(){ if(Speak.topic !== null || Speak.custom) this.renderSession(); else this.renderList(); },
-  renderList(){
-    const td = topicOfDay(), t = TOPICS[td];
-    $("#v-speak").innerHTML = `
-      <h1>口语</h1>
-      <p class="muted" style="margin:8px 0 18px">选一个场景，用英语说出来。说不出来的地方可以夹中文，AI 会帮你改成美国人日常的说法，再陪你接着聊下去。</p>
-      <button class="today-topic" data-t="${td}">
-        <div class="k">今日话题</div><div class="t">${esc(t.title)}</div><div class="d">${esc(t.brief)}</div>
-      </button>
-      <h3>自己出题</h3>
-      <div class="row"><input type="text" id="sp-custom" placeholder="比如：跟邻居说他家狗太吵了" aria-label="自定义场景"><button class="btn sm" id="sp-custom-go">开始</button></div>
-      <h3>全部话题</h3>
-      <div class="panel" style="padding:4px 16px">
-        ${TOPICS.map((x, k) => `<button class="topic" data-t="${k}">${bulletHTML(x.scene)}<div class="grow"><div class="t">${esc(x.title)}</div><div class="d">${esc(x.brief)}</div></div></button>`).join("")}
-      </div>`;
-    $$("#v-speak [data-t]").forEach(b => b.onclick = () => this.open(+b.dataset.t));
-    $("#sp-custom-go").onclick = () => {
-      const s = $("#sp-custom").value.trim(); if(!s){ $("#sp-custom").focus(); return; }
-      Speak.custom = { scene: null, title: "自定义场景", them: "the other person", brief: s, hints: [] };
-      Speak.topic = null; Speak.turns = []; this.renderSession();
-    };
-  },
-  open(k){ Speak.topic = k; Speak.custom = null; Speak.turns = []; this.renderSession(); window.scrollTo(0, 0); },
   renderSession(){
     const t = currentTopic();
     const hasKey = !!Settings.get("apiKey");
@@ -790,6 +794,10 @@ Object.assign(Views.speak, {
         <div class="grow"><div class="t">开口反应</div><div class="small muted">听对方说一句，马上用英语回。练的是不经过中文、张口就来。</div></div>
         <span class="mic" style="--c:var(--green);width:44px;height:44px">${ICON.mic}</span>
       </button>
+      <button class="hf-card" id="sp-pattern">
+        <div class="grow"><div class="t">句型造句</div><div class="small muted">随机抽一个高频句型，用它说说你自己的事，AI 帮你改。</div></div>
+        <span class="bullet" style="--c:var(--indigo)">P</span>
+      </button>
       <h3>自己出题</h3>
       <div class="row"><input type="text" id="sp-custom" placeholder="比如：跟邻居说他家狗太吵了" aria-label="自定义场景"><button class="btn sm" id="sp-custom-go">开始</button></div>
       <h3>全部话题 <span class="small muted">${TOPICS.length} 个</span></h3>
@@ -803,6 +811,7 @@ Object.assign(Views.speak, {
     $$("#v-speak [data-t]").forEach(b => b.onclick = () => this.open(+b.dataset.t));
     $$("#sp-cats .chip").forEach(b => b.onclick = () => { Speak.cat = b.dataset.c; this.renderList(); });
     $("#sp-reflex").onclick = () => this.startReflex();
+    $("#sp-pattern").onclick = () => { const all = [...PATTERNS, ...STRUCTURES]; practicePattern(all[Math.floor(Math.random() * all.length)]); };
     $("#sp-custom-go").onclick = () => {
       const s = $("#sp-custom").value.trim(); if(!s){ $("#sp-custom").focus(); return; }
       Speak.custom = { scene: null, title: "自定义场景", them: "the other person", brief: s, hints: [] };
@@ -1126,8 +1135,8 @@ Views.me = {
       <h3>每日计划</h3>
       <div class="panel">
         <div class="field"><label for="me-new">每天学几句新句</label>
-          <select id="me-new">${[5, 8, 12, 20].map(n => `<option value="${n}" ${Settings.get("newPerDay") === n ? "selected" : ""}>${n} 句</option>`).join("")}</select>
-          <p class="help">复习到期的句子不受这个限制。</p></div>
+          <select id="me-new">${[5, 8, 10, 15, 20, 30].map(n => `<option value="${n}" ${Settings.get("newPerDay") === n ? "selected" : ""}>${n} 句</option>`).join("")}</select>
+          <p class="help">复习到期的句子不受这个限制。新内容从哪里来、从哪个级别开始，在「词汇与句型」页设置。</p></div>
       </div>
       <h3>AI 口语批改</h3>
       <div class="panel">
@@ -1204,8 +1213,111 @@ Views.me = {
   }
 };
 
+/* ================= 词汇与句型 ================= */
+const Words = { tab: "vocab", level: "B1", type: "all" };
+function practicePattern(p){
+  stopActiveListen();
+  Speak.reflex = null; Speak.topic = null; Speak.turns = [];
+  Speak.custom = { scene: p.id.startsWith("g") ? "structure" : "pattern", title: p.p, them: "Coach",
+    brief: `用「${p.p}」（${p.zh}）说两三句和你自己生活有关的话。参考例句：${p.ex[0][0]}`, hints: [p.ex[0][0], p.ex[1][0]] };
+  if(location.hash === "#speak") Views.speak.renderSession(); else location.hash = "#speak";
+}
+const lvBadge = l => `<span class="lv lv-${l}">${l}</span>`;
+Views.words = {
+  show(){
+    const s = SRS.all(), mix = Settings.get("mix"), start = Settings.get("startLevel");
+    const lvCount = L => { const ids = VOCAB.filter(v => v.l === L).map(v => v.id); return `${ids.filter(id => s[id] && s[id].reps > 0).length}/${ids.length}`; };
+    let body = "";
+    if(Words.tab === "vocab"){
+      const list = VOCAB.filter(v => (Words.level === "all" || v.l === Words.level) && (Words.type === "all" || v.t === Words.type));
+      body = `
+        <div class="chips" id="wd-type" style="margin-top:8px">
+          <button class="chip${Words.type === "all" ? " on" : ""}" data-t="all">全部</button>
+          ${Object.entries(VOCAB_TYPES).map(([k, n]) => `<button class="chip${Words.type === k ? " on" : ""}" data-t="${k}">${n}</button>`).join("")}
+        </div>
+        <div class="row between" style="margin:14px 0 6px"><span class="small muted">${list.length} 个</span><button class="link" id="wd-addall">这一页全部加入复习</button></div>
+        <div class="panel" style="padding:2px 16px">
+          ${list.map(v => `
+            <div class="wrow">
+              <button class="play sm" data-wp="${v.id}" style="--c:var(--teal)" aria-label="播放">${ICON.play}</button>
+              <div class="grow">
+                <div class="row" style="gap:8px"><b class="word">${esc(v.w)}</b>${lvBadge(v.l)}</div>
+                <div class="small muted">${VOCAB_TYPES[v.t]}，${esc(v.zh)}</div>
+                <div class="ex">${esc(v.ex)}</div>
+              </div>
+              ${s[v.id] ? `<span class="small muted">复习中</span>` : `<button class="icon-btn" data-wadd="${v.id}" aria-label="加入复习">${ICON.plus}</button>`}
+            </div>`).join("")}
+        </div>`;
+    } else {
+      const src = Words.tab === "pattern" ? PATTERNS : STRUCTURES;
+      const list = src.filter(p => Words.level === "all" || p.l === Words.level);
+      body = `
+        <p class="small muted" style="margin:12px 0 6px">${list.length} 个。每个配两句经典例句，可以加入复习，也可以直接用它练口语。</p>
+        ${list.map(p => {
+          const inSrs = p.ex.every((_, k) => s[`${p.id}-${k}`]);
+          return `
+          <div class="panel pcard">
+            <div class="row between" style="align-items:flex-start"><b class="pat">${esc(p.p)}</b>${lvBadge(p.l)}</div>
+            <p class="small muted" style="margin-top:2px">${esc(p.zh)}</p>
+            ${p.ex.map(([en, zh], k) => `
+              <div class="row exrow">
+                <button class="play sm" data-pp="${p.id}-${k}" style="--c:var(--indigo)" aria-label="播放">${ICON.play}</button>
+                <div class="grow"><div class="ex-en">${esc(en)}</div><div class="small muted">${esc(zh)}</div></div>
+              </div>`).join("")}
+            <div class="row" style="gap:8px;margin-top:10px">
+              ${inSrs ? `<span class="small muted">例句复习中</span>` : `<button class="chip" data-padd="${p.id}">加入复习</button>`}
+              <button class="chip" data-pspeak="${p.id}">用它说一说</button>
+            </div>
+          </div>`;
+        }).join("")}`;
+    }
+    $("#v-words").innerHTML = `
+      <div class="row" style="margin-bottom:14px"><a class="icon-btn" href="#today" aria-label="返回">${ICON.back}</a><h2 style="margin:0">词汇与句型</h2></div>
+      <div class="panel flat">
+        <div class="small" style="font-weight:700">每天自动加入复习</div>
+        <div class="chips" id="wd-mix" style="margin-top:8px;flex-wrap:wrap">
+          <button class="chip${mix.vocab !== false ? " on" : ""}" data-mx="vocab">高频词汇</button>
+          <button class="chip${mix.pattern !== false ? " on" : ""}" data-mx="pattern">句型句式</button>
+          <button class="chip${mix.scenes !== false ? " on" : ""}" data-mx="scenes">场景句</button>
+        </div>
+        <div class="row" style="margin-top:10px;gap:8px;flex-wrap:wrap"><span class="small muted">从哪个级别开始</span>
+          ${LEVELS.map(L => `<button class="chip${start === L ? " on" : ""}" data-start="${L}">${L}</button>`).join("")}
+        </div>
+        <p class="small muted" style="margin-top:8px">词汇已学：B1 ${lvCount("B1")}，B2 ${lvCount("B2")}，C1 ${lvCount("C1")}</p>
+      </div>
+      <div class="seg" id="wd-tabs" style="margin-top:16px">
+        ${[["vocab", `词汇 ${VOCAB.length}`], ["pattern", `句型 ${PATTERNS.length}`], ["structure", `句式 ${STRUCTURES.length}`]].map(([k, n]) => `<button class="${Words.tab === k ? "on" : ""}" data-tab="${k}">${n}</button>`).join("")}
+      </div>
+      <div class="chips" id="wd-level" style="margin-top:12px">
+        ${["all", ...LEVELS].map(L => `<button class="chip${Words.level === L ? " on" : ""}" data-l="${L}">${L === "all" ? "全部级别" : L}</button>`).join("")}
+      </div>
+      ${body}`;
+    const keep = fn => () => { const y = window.scrollY; fn(); this.show(); window.scrollTo(0, y); };
+    $$("#wd-tabs button").forEach(b => b.onclick = () => { Words.tab = b.dataset.tab; this.show(); });
+    $$("#wd-level .chip").forEach(b => b.onclick = keep(() => Words.level = b.dataset.l));
+    $$("#wd-type .chip").forEach(b => b.onclick = keep(() => Words.type = b.dataset.t));
+    $$("#wd-mix .chip").forEach(b => b.onclick = keep(() => {
+      const m = { ...Settings.get("mix") }; m[b.dataset.mx] = m[b.dataset.mx] === false;
+      if(m.vocab === false && m.pattern === false && m.scenes === false){ toast("至少保留一种"); return; }
+      Settings.set("mix", m); Review.queue = null;
+    }));
+    $$("[data-start]").forEach(b => b.onclick = keep(() => { Settings.set("startLevel", b.dataset.start); Review.queue = null; }));
+    $$("[data-wp]").forEach(b => b.onclick = async () => { const c = EXTRA_CARDS[b.dataset.wp]; b.classList.add("speaking"); if(await Speech.say(c.word, 0.8)){ await sleep(350); await Speech.say(c.en); } b.classList.remove("speaking"); });
+    $$("[data-pp]").forEach(b => b.onclick = () => playWith(b, EXTRA_CARDS[b.dataset.pp].en));
+    $$("[data-wadd]").forEach(b => b.onclick = () => { SRS.schedule(b.dataset.wadd, Date.now()); Review.queue = null; b.outerHTML = `<span class="small muted">复习中</span>`; });
+    const addAll = $("#wd-addall");
+    if(addAll) addAll.onclick = keep(() => {
+      const list = VOCAB.filter(v => (Words.level === "all" || v.l === Words.level) && (Words.type === "all" || v.t === Words.type));
+      list.forEach(v => { if(!SRS.all()[v.id]) SRS.schedule(v.id, Date.now()); });
+      Review.queue = null; toast(`已加入 ${list.length} 个词，今天就能复习`);
+    });
+    $$("[data-padd]").forEach(b => b.onclick = keep(() => { const p = [...PATTERNS, ...STRUCTURES].find(x => x.id === b.dataset.padd); p.ex.forEach((_, k) => SRS.schedule(`${p.id}-${k}`, Date.now())); Review.queue = null; toast("两句例句已加入复习"); }));
+    $$("[data-pspeak]").forEach(b => b.onclick = () => practicePattern([...PATTERNS, ...STRUCTURES].find(x => x.id === b.dataset.pspeak)));
+  }
+};
+
 /* ================= 路由 ================= */
-const ROUTES = ["today", "review", "library", "listen", "speak", "link", "me"];
+const ROUTES = ["today", "review", "library", "words", "listen", "speak", "link", "me"];
 function route(){
   let v = location.hash.slice(1) || "today";
   if(!ROUTES.includes(v)) v = "today";
@@ -1213,7 +1325,7 @@ function route(){
   if(Listen.state === "hf" && v !== "listen") Views.listen.stopHF();
   if(Link.recording){ Link.recording = false; clearInterval(Link.recTimer); try{ Link.recorder && Link.recorder.stop(); }catch(_){} Link.stream && Link.stream.getTracks().forEach(t => t.stop()); }
   ROUTES.forEach(x => $("#v-" + x).hidden = x !== v);
-  const tab = v === "review" || v === "library" ? "today" : v;
+  const tab = ["review", "library", "words"].includes(v) ? "today" : v;
   $$(".tabs a").forEach(a => a.classList.toggle("on", a.dataset.tab === tab));
   Views[v].show();
   window.scrollTo(0, 0);
