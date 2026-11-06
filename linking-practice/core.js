@@ -164,9 +164,13 @@ const SRS = {
 };
 
 /* ---------- 朗读（美音） ---------- */
+const TTS_OK = "speechSynthesis" in window && typeof SpeechSynthesisUtterance !== "undefined";
+const IS_ANDROID = /Android/i.test(navigator.userAgent);
+const IS_IOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const IN_APP_BROWSER = /MicroMessenger|QQ\/|Weibo|DingTalk|Lark|FBAN|FBAV|Instagram|Line\//i.test(navigator.userAgent);
 const Speech = {
-  voices: [],
-  token: 0,
+  voices: [], all: [], token: 0, unlocked: false, loaded: false,
+  stats: { started: 0, failed: 0, lastError: "" }, warned: false,
   score(v){
     let s = 0;
     if(/natural|neural|online/i.test(v.name)) s += 50;
@@ -174,42 +178,77 @@ const Speech = {
     if(/enhanced|优化/i.test(v.name)) s += 35;
     if(/aria|jenny|guy|ava|zoe|evan|allison|samantha|nicky|tom|susan|joelle|nathan/i.test(v.name)) s += 15;
     if(/google/i.test(v.name)) s += 20;
-    if(/novelty|bells|bubbles|bad news|good news|boing|cellos|whisper|zarvox|trinoids|wobble|organ|jester|superstar|albert|fred|junior|ralph|kathy|bahh/i.test(v.name)) s -= 100;
+    if(/^en[-_]US/i.test(v.lang)) s += 10;
+    if(/novelty|bells|bubbles|bad news|good news|boing|cellos|whisper|zarvox|trinoids|wobble|organ|jester|superstar|albert|fred|junior|ralph|kathy|bahh|eddy|flo|grandma|grandpa|reed|rocko|sandy|shelley/i.test(v.name)) s -= 100;
     return s;
   },
   load(){
-    if(!("speechSynthesis" in window)) return;
-    const all = speechSynthesis.getVoices();
+    if(!TTS_OK) return;
+    let all = [];
+    try{ all = speechSynthesis.getVoices() || []; }catch(_){}
+    this.all = all;
+    if(all.length) this.loaded = true;
     let us = all.filter(v => /^en[-_]US/i.test(v.lang));
     if(!us.length) us = all.filter(v => /^en/i.test(v.lang));
     this.voices = us.sort((a, b) => this.score(b) - this.score(a));
-    document.dispatchEvent(new Event("voiceschanged"));
+    document.dispatchEvent(new Event("fluent-voices"));
   },
   voice(){ return this.voices.find(v => v.name === Settings.get("voice")) || this.voices[0] || null; },
+  /* iOS 和部分安卓要求第一次朗读必须发生在用户点击的那一刻：首次触摸时先“解锁” */
+  unlock(){
+    if(this.unlocked || !TTS_OK) return;
+    this.unlocked = true;
+    try{ const u = new SpeechSynthesisUtterance(" "); u.volume = 0; u.lang = "en-US"; speechSynthesis.speak(u); }catch(_){}
+  },
+  fail(reason){
+    this.stats.failed++; this.stats.lastError = reason;
+    if(!this.warned){ this.warned = true; document.dispatchEvent(new Event("fluent-ttsfail")); if(typeof toast === "function") toast("没有声音？去「我的」→「声音检查」看看原因"); }
+  },
+  /* 朗读必须同步发出（不能放进定时器），否则会被浏览器当成“非用户操作”拦截 */
   say(text, rate, alt){
     const my = ++this.token;
     rate = rate || Settings.get("speed");
-    const words = String(text).split(/\s+/).length;
-    const est = (words * 0.42 / rate + 1.5) * 1000;
-    if(!("speechSynthesis" in window)) return sleep(400);
+    text = String(text || "").trim();
+    const words = text.split(/\s+/).length;
+    const est = (words * 0.45 / rate + 1.2) * 1000;
+    if(!TTS_OK || !text){ if(!TTS_OK) this.fail("unsupported"); return sleep(text ? est : 100).then(() => my === this.token); }
+    if(!this.voices.length) this.load();
     return new Promise(resolve => {
-      let done = false;
+      let done = false, started = false;
+      const t0 = Date.now();
       const finish = () => { if(!done){ done = true; resolve(my === this.token); } };
       try{
-        speechSynthesis.cancel();
+        const synth = window.speechSynthesis;
+        if(synth.speaking || synth.pending) synth.cancel();
+        if(synth.paused) synth.resume();
         const u = new SpeechSynthesisUtterance(text);
         u.lang = "en-US";
         let v = this.voice();
         if(alt && this.voices.length > 1){ const others = this.voices.filter(x => x !== v && this.score(x) > -50); if(others.length) v = others[0]; }
-        if(v) u.voice = v;
-        u.rate = rate;
-        u.onend = finish; u.onerror = finish;
-        setTimeout(() => { if(my === this.token) speechSynthesis.speak(u); else finish(); }, 60);
-        setTimeout(finish, est + 2500);
-      }catch(_){ finish(); }
+        if(v){ u.voice = v; u.lang = String(v.lang || "en-US").replace("_", "-"); }
+        u.rate = rate; u.volume = 1;
+        u.onstart = () => { started = true; this.stats.started++; this.stats.lastError = ""; };
+        u.onend = () => {
+          // 有的手机没有英文语音时会“瞬间结束”而不出声
+          if(!started && Date.now() - t0 < 250 && words > 1 && my === this.token) this.fail("instant-end");
+          finish();
+        };
+        u.onerror = e => {
+          const er = e && e.error;
+          if(er === "not-allowed"){ this.stats.lastError = er; if(typeof toast === "function" && my === this.token) toast("点一下播放按钮就能听到"); }
+          else if(er && er !== "interrupted" && er !== "canceled" && my === this.token) this.fail(er);
+          finish();
+        };
+        this._keep = u; // 防止被垃圾回收导致 onend 不触发（Chrome 的老问题）
+        synth.speak(u);
+        // 个别浏览器在 cancel 之后第一次 speak 会被吞掉：没开始就再补发一次
+        setTimeout(() => { if(!started && !done && my === this.token && !synth.speaking && !synth.pending){ try{ synth.speak(u); }catch(_){} } }, 700);
+        setTimeout(() => { if(!started && !done && my === this.token) this.fail("nostart"); }, 4000);
+        setTimeout(finish, est + 3000);
+      }catch(e){ this.fail(e.message || "error"); finish(); }
     });
   },
-  stop(){ this.token++; try{ speechSynthesis.cancel(); }catch(_){} },
+  stop(){ this.token++; try{ if(TTS_OK) speechSynthesis.cancel(); }catch(_){} },
   async chunks(list, rate){
     const my = this.token + 1;
     for(let i = 0; i < list.length; i++){
@@ -220,16 +259,23 @@ const Speech = {
     }
   }
 };
-if("speechSynthesis" in window){ Speech.load(); speechSynthesis.onvoiceschanged = () => Speech.load(); }
+if(TTS_OK){
+  Speech.load();
+  try{ speechSynthesis.addEventListener ? speechSynthesis.addEventListener("voiceschanged", () => Speech.load()) : (speechSynthesis.onvoiceschanged = () => Speech.load()); }catch(_){ speechSynthesis.onvoiceschanged = () => Speech.load(); }
+  // 有的安卓不会触发 voiceschanged，过一会儿再读一次
+  [300, 1000, 2500].forEach(t => setTimeout(() => { if(!Speech.voices.length) Speech.load(); }, t));
+  ["pointerdown", "touchend", "click", "keydown"].forEach(ev => document.addEventListener(ev, () => Speech.unlock(), { once: true, capture: true }));
+}
 
 /* ---------- 语音识别 ---------- */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let activeRecognizer = null;
 function startListening({ onText, target } = {}){
   if(!SR) return { stop(){}, done: Promise.resolve({ error: "unsupported", text: "" }) };
   let r, finals = [], confs = [], err = null, interim = "";
   const done = new Promise(resolve => {
     try{ r = new SR(); }catch(e){ resolve({ error: "unsupported", text: "" }); return; }
-    r.lang = "en-US"; r.continuous = true; r.interimResults = true; r.maxAlternatives = 3;
+    r.lang = "en-US"; r.continuous = !IS_ANDROID; r.interimResults = true; r.maxAlternatives = 3;
     r.onresult = e => {
       finals = []; confs = []; interim = "";
       for(let i = 0; i < e.results.length; i++){
@@ -248,10 +294,13 @@ function startListening({ onText, target } = {}){
     };
     r.onerror = e => { err = e.error; };
     r.onend = () => {
+      // 安卓上偶尔每个结果都包含前面的内容，只保留最长的那一条
+      if(finals.length > 1 && finals.every((f, k) => k === 0 || f.toLowerCase().startsWith(finals[k - 1].toLowerCase()))) finals = [finals[finals.length - 1]];
       const text = finals.join(" ").trim() || interim.trim();
       resolve({ text, confidence: confs.length ? confs.reduce((a, b) => a + b, 0) / confs.length : 0, error: text ? null : err });
     };
     try{ r.start(); }catch(e){ resolve({ error: "start-failed", text: "" }); }
+    activeRecognizer = r;
   });
   return { stop(){ try{ r && r.stop(); }catch(_){} }, done: Promise.race([done, new Promise(res => setTimeout(() => res({ text: interim, error: "timeout" }), 60000))]) };
 }
@@ -262,7 +311,10 @@ function srErrorText(e){
     "not-allowed": "没有麦克风权限，请在浏览器设置里允许。",
     "service-not-allowed": "浏览器不允许语音识别。",
     "audio-capture": "麦克风被占用了。",
-    "no-speech": "没听到声音，靠近麦克风再试一次。"
+    "no-speech": "没听到声音，靠近麦克风再试一次。",
+    "language-not-supported": "手机的语音识别不支持英语，需要安装 Google 语音服务。",
+    "start-failed": "语音识别没能启动，稍等一下再点一次。",
+    timeout: "识别超时了，再试一次。"
   })[e] || "没听清，再试一次。";
 }
 

@@ -63,7 +63,9 @@ Views.today = {
       { key: "link", t: "连读跟读", s: lg.link ? `跟读了 ${lg.link} 次` : "读一句，检查连读和停顿", done: lg.link > 0, href: "#link", cta: lg.link ? "再练" : "开始" }
     ];
     const streak = Log.streak();
+    const sp = soundProblem();
     $("#v-today").innerHTML = `
+      ${sp ? `<a class="banner" href="#me">${sp === "inapp" ? "你在 App 内置浏览器里打开，可能没有声音。" : sp === "unsupported" ? "这个浏览器不能朗读英文。" : sp === "novoice" ? "手机里没有英文语音，所以听不到朗读。" : "朗读好像没有声音。"}<b>点这里检查</b></a>` : ""}
       <div class="top">
         <div><p class="muted">${d.getMonth() + 1}月${d.getDate()}日 星期${"日一二三四五六"[d.getDay()]}</p><h1>今天的路线</h1></div>
         <div class="streak"><b>${streak}</b><span>连续天数</span></div>
@@ -667,7 +669,7 @@ async function callCoach(said){
   const t = currentTopic();
   const payload = {
     scenario: t.brief, partner: t.them || "the other person",
-    conversation: Speak.turns.map(x => ({ who: x.who, text: x.who === "me" ? x.natural : x.text })),
+    conversation: Speak.turns.filter(x => x.who === "me" || x.who === "them").map(x => ({ who: x.who, text: x.who === "me" ? x.natural : x.text })),
     learner_said: said
   };
   let resp;
@@ -693,7 +695,7 @@ async function callCoach(said){
 
 function coachPrompt(said){
   const t = currentTopic();
-  const hist = Speak.turns.map(x => x.who === "me" ? `我：${x.natural}` : `对方：${x.text}`).join("\n");
+  const hist = Speak.turns.filter(x => x.who === "me" || x.who === "them").map(x => x.who === "me" ? `我：${x.natural}` : `对方：${x.text}`).join("\n");
   return `我在练美式英语口语，请当我的口语教练。\n场景：${t.brief}\n${hist ? "之前的对话：\n" + hist + "\n" : ""}我刚才说的是：「${said}」\n\n请：\n1. 改成美国人在这个场景里会自然说出口的地道口语；\n2. 再给一个更随意的说法；\n3. 用中文解释最关键的几处改动，为什么这样更地道；\n4. 扮演对方，用一两句话自然地回应我，让我接着练。`;
 }
 
@@ -1155,6 +1157,8 @@ Views.me = {
     const mine = Cards.user();
     $("#v-me").innerHTML = `
       <h1>我的</h1>
+      <h3>声音检查</h3>
+      <div class="panel" id="me-diag"></div>
       <h3>朗读</h3>
       <div class="panel">
         <div class="field"><label for="me-voice">美音发音人</label>
@@ -1209,7 +1213,8 @@ Views.me = {
       sel.innerHTML = Speech.voices.length ? Speech.voices.map((v, i) => `<option value="${esc(v.name)}">${i === 0 ? "★ " : ""}${esc(v.name.replace(/^Microsoft\s+/, "").replace(/\s*-\s*English \(United States\)/, ""))}</option>`).join("") : `<option>系统默认（没找到美音）</option>`;
       const cur = Speech.voice(); if(cur) sel.value = cur.name;
     };
-    fill(); document.addEventListener("voiceschanged", fill);
+    fill(); Views.me.fillVoices = fill;
+    this.renderDiag();
     sel.onchange = () => { Settings.set("voice", sel.value); Speech.say("Hey! This is how I sound."); };
     $("#me-try").onclick = () => Speech.say("Hey! This is how I sound.");
     $("#me-speed").oninput = e => { const v = +e.target.value; Settings.set("speed", v); $("#me-speed-v").textContent = v.toFixed(2) + "×"; };
@@ -1370,6 +1375,77 @@ Views.words = {
     $$("[data-padd]").forEach(b => b.onclick = keep(() => { const p = [...PATTERNS, ...STRUCTURES].find(x => x.id === b.dataset.padd); p.ex.forEach((_, k) => SRS.schedule(`${p.id}-${k}`, Date.now())); Review.queue = null; toast("两句例句已加入复习"); }));
     $$("[data-pspeak]").forEach(b => b.onclick = () => practicePattern([...PATTERNS, ...STRUCTURES].find(x => x.id === b.dataset.pspeak)));
   }
+};
+
+/* ================= 声音检查 ================= */
+let lastSoundProblem = null;
+document.addEventListener("fluent-voices", () => {
+  if(location.hash === "#me"){ Views.me.fillVoices && Views.me.fillVoices(); Views.me.renderDiag(); }
+  const sp = soundProblem();
+  if(sp !== lastSoundProblem && (location.hash === "#today" || !location.hash)) Views.today.show();
+  lastSoundProblem = sp;
+});
+document.addEventListener("fluent-ttsfail", () => { if(location.hash === "#today" || !location.hash) Views.today.show(); });
+function soundProblem(){
+  if(!TTS_OK) return "unsupported";
+  if(IN_APP_BROWSER) return "inapp";
+  if(Speech.loaded && !Speech.voices.length) return "novoice";
+  if(Speech.stats.failed && !Speech.stats.started) return "failed";
+  return null;
+}
+const SOUND_FIX = `
+  <ol class="fix">
+    <li><b>调大媒体音量</b>：按音量键时如果调的是铃声，点一下展开，把「媒体」音量拉高；关掉静音和勿扰模式。iPhone 还要关掉侧边的静音开关。</li>
+    <li><b>用 Chrome 或 Safari 打开</b>：微信、QQ 等 App 里的内置浏览器通常不能发声。</li>
+    <li><b>安装英文语音</b>（安卓最常见的原因）：小米、华为、荣耀、OPPO、vivo 自带的语音引擎大多只有中文。打开 <b>设置</b>，搜索「<b>文字转语音</b>」，把首选引擎改成「<b>Google 语音服务</b>」（Speech Services by Google）。如果没有这一项，先在 Google Play 安装「Speech Services by Google」，再到引擎设置里下载「英语（美国）」语音数据。</li>
+    <li><b>iPhone</b>：设置 › 辅助功能 › 朗读内容 › 声音 › 英语，确认有英语（美国）的声音，没有就下载一个。</li>
+    <li>设置好后，把这个 App 彻底关掉再重新打开，回到这里点「测试声音」。</li>
+  </ol>`;
+Views.me.renderDiag = function(){
+  const box = $("#me-diag"); if(!box) return;
+  const p = soundProblem();
+  const v = Speech.voice();
+  const enCount = Speech.voices.length, allCount = Speech.all.length;
+  const status = !TTS_OK ? `<span class="no">这个浏览器不支持朗读</span>`
+    : !Speech.loaded ? `<span class="mid">正在读取手机里的语音…</span>`
+    : enCount ? `<span class="ok">找到 ${enCount} 个英文发音人</span>（共 ${allCount} 个语音）`
+    : `<span class="no">手机里没有英文语音</span>（共 ${allCount} 个语音，都不是英文）`;
+  box.innerHTML = `
+    <p>${status}</p>
+    ${v ? `<p class="small muted">当前使用：${esc(v.name)}（${esc(v.lang)}）</p>` : ""}
+    ${IN_APP_BROWSER ? `<p class="err" style="margin-top:6px">你现在是在 App 的内置浏览器里打开的，请复制网址到 Chrome 或 Safari 打开。</p>` : ""}
+    ${Speech.stats.lastError ? `<p class="small muted">上次朗读失败的原因：${esc({ "not-allowed": "浏览器拦截了自动朗读，点一下播放按钮再试", nostart: "发出了朗读指令但没有开始播放", "instant-end": "朗读瞬间结束，通常是没有英文语音", unsupported: "浏览器不支持朗读", "synthesis-failed": "语音引擎出错", "language-unavailable": "没有英文语音", "voice-unavailable": "选的发音人不可用", "audio-busy": "音频被占用" }[Speech.stats.lastError] || Speech.stats.lastError)}</p>` : ""}
+    <div class="row wrap" style="gap:8px;margin-top:12px">
+      <button class="btn line sm" style="--c:var(--blue)" id="dg-tts">${ICON.play}<span>测试声音</span></button>
+      <button class="btn ghost sm" id="dg-sr">${ICON.mic}<span>测试语音识别</span></button>
+    </div>
+    <p class="small" id="dg-res" style="margin-top:10px"></p>
+    <div id="dg-fix" ${p ? "" : "hidden"}>${SOUND_FIX}</div>
+    ${p ? "" : `<button class="link" id="dg-showfix" style="margin-top:6px">听不到声音？看解决办法</button>`}`;
+  $("#dg-tts").onclick = async () => {
+    const res = $("#dg-res");
+    const before = Speech.stats.started;
+    res.innerHTML = "正在播放…";
+    await Speech.say("Hello! If you can hear me, the sound is working.", 0.95);
+    const started = Speech.stats.started > before;
+    res.innerHTML = started
+      ? `手机已经开始朗读了。<b>能听到吗？</b> <button class="chip" id="dg-yes">能听到</button> <button class="chip" id="dg-no">听不到</button>`
+      : `<span class="no">朗读没有开始。</span>按下面的步骤检查。`;
+    if(!started) $("#dg-fix").hidden = false;
+    const y = $("#dg-yes"), n = $("#dg-no");
+    if(y) y.onclick = () => { res.innerHTML = `<span class="ok">声音正常。</span>`; Speech.stats.failed = 0; };
+    if(n) n.onclick = () => { res.innerHTML = `朗读在进行但没声音，多半是<b>媒体音量</b>太小或者开了静音，或者引擎里没有英文语音。`; $("#dg-fix").hidden = false; };
+  };
+  $("#dg-sr").onclick = async () => {
+    const res = $("#dg-res");
+    if(!SR){ res.innerHTML = `<span class="no">这个浏览器不支持语音识别。</span>安卓请用 Chrome（需要 Google 服务），iPhone 用 Safari。可以改用输入法自带的语音输入。`; return; }
+    res.innerHTML = "请说一句英语，比如 “How are you today?”…";
+    const L = startListening({ onText: t => res.textContent = "听到：" + t });
+    setTimeout(() => L.stop(), 6000);
+    const r = await L.done;
+    res.innerHTML = r.text ? `<span class="ok">语音识别正常</span>，听到：“${esc(r.text)}”` : `<span class="no">识别失败</span>：${esc(srErrorText(r.error))}`;
+  };
+  const sf = $("#dg-showfix"); if(sf) sf.onclick = () => { $("#dg-fix").hidden = false; sf.remove(); };
 };
 
 /* ================= 路由 ================= */
