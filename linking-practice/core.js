@@ -23,7 +23,7 @@ const store = {
 window.addEventListener("storage", e => { if(e.key && e.key.startsWith("fluent:")) store._c.delete(e.key.slice(7)); });
 
 const Settings = {
-  defaults: { speed: 0.9, voice: "", reactSec: 8, engine: "system", cast: "scene", accent: "both", voice1: "af_heart", voice2: "am_michael", apiKey: "", model: "claude-sonnet-5-5", keepAudio: true, reviewMode: "listen", focus: [], newPerDay: 10, newWordsPerDay: 15, mix: { scenes: true, vocab: true, pattern: true }, startLevel: "B1" },
+  defaults: { speed: 0.9, voice: "", reactSec: 8, engine: "neural", cast: "scene", accent: "both", voice1: "af_heart", voice2: "am_michael", apiKey: "", model: "claude-sonnet-5-5", keepAudio: true, reviewMode: "listen", focus: [], newPerDay: 10, newWordsPerDay: 15, mix: { scenes: true, vocab: true, pattern: true }, startLevel: "B1" },
   get(k){ const s = store.get("settings", {}); return k in s ? s[k] : this.defaults[k]; },
   set(k, v){ const s = store.get("settings", {}); s[k] = v; store.set("settings", s); }
 };
@@ -177,7 +177,7 @@ const SRS = {
 /* ---------- 朗读（美音） ---------- */
 /* 性能统计：用来在「我的」里显示真实耗时 */
 const Perf = {
-  boot: 0, data: { sys: [], ai: [], tap: [] },
+  boot: 0, data: { sys: [], ai: [], clip: [], tap: [] },
   add(k, ms){ const a = this.data[k]; a.push(ms); if(a.length > 20) a.shift(); },
   avg(k){ const a = this.data[k]; return a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null; }
 };
@@ -235,7 +235,7 @@ const Speech = {
   say(text, rate, alt){
     // AI 真人语音可用时优先用它，出错再退回系统语音
     const t = String(text || "").trim();
-    if(t && typeof Neural !== "undefined" && Neural.active()){
+    if(t && typeof Neural !== "undefined" && Neural.covers(t, alt)){
       const my = ++this.token;
       try{ if(TTS_OK) speechSynthesis.cancel(); }catch(_){}
       return Neural.say(t, rate || Settings.get("speed"), alt, my).catch(() => my === this.token ? this._say(t, rate, alt, 0) : false);

@@ -1,0 +1,11 @@
+const fs=require('fs');
+const main=JSON.parse(fs.readFileSync('list.json')), us=JSON.parse(fs.readFileSync('list_us.json'));
+const src=fs.readFileSync('/home/claude/apps/linking-practice/neural.js','utf8');
+const voices=[...src.matchAll(/\{ id: "([a-z_]+)",\s*name: "([A-Za-z]+)"/g)].map(m=>[m[1],m[2]]);
+const cy=eval(src.match(/const cyrb53 = ([\s\S]*?\n\};)/)[1].replace(/;$/,''));
+const have=new Set(main.map(x=>x.voice+'|'+x.key)); const extra=[];
+voices.forEach(([id,name])=>{const t=`Hi, I'm ${name}. Nice to meet you! Want to grab a coffee sometime?`; const x={text:t,voice:id,key:cy(t),prio:0.5,pos:null}; if(!have.has(id+'|'+x.key)){have.add(id+'|'+x.key);extra.push(x);}});
+us.filter(x=>x.prio<=4).forEach(x=>{ if(!have.has(x.voice+'|'+x.key)){have.add(x.voice+'|'+x.key); extra.push({...x,prio:4.5});}});
+const all=[...main,...extra].sort((a,b)=>a.prio-b.prio);
+fs.writeFileSync('list_all.json',JSON.stringify(all));
+console.log('voices',voices.length,'extra',extra.length,'all',all.length);

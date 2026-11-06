@@ -52,7 +52,7 @@ function topicOfDay(){
   return days % TOPICS.length;
 }
 function warmToday(){
-  if(typeof Neural === "undefined" || !Neural.active()) return;
+  if(typeof Neural === "undefined" || !Neural.wanted()) return;
   const ids = [...SRS.dueIds(), ...SRS.newIds(Settings.get("newPerDay"))].slice(0, 25);
   Neural.warm(ids.map(id => Cards.get(id)).filter(Boolean).map(c => [c.en, c.scene]));
 }
@@ -873,6 +873,7 @@ Object.assign(Speak, { cat: "all", reflex: null });
 
 Object.assign(Views.speak, {
   show(){
+    neuralSoon();
     if(Speak.reflex) this.renderReflex();
     else if(Speak.topic !== null || Speak.custom) this.renderSession();
     else this.renderList();
@@ -1027,6 +1028,7 @@ Object.assign(Views.speak, {
 const Link = { tokens: [], links: [], text: LINK_PRESETS[0], recorder: null, stream: null, chunks: [], recDone: null, recogDone: null, recording: false, recTimer: null };
 Views.link = {
   show(){
+    neuralSoon();
     $("#v-link").innerHTML = `
       <h1>连读跟读</h1>
       <p class="muted" style="margin:8px 0 16px">自动标出连读点，听美音示范，录下你读的，检查哪里没连上、哪里断开了。</p>
@@ -1450,12 +1452,13 @@ Views.me.renderPerf = function(){
   const ms = v => v === null ? "—" : v < 1000 ? v + " 毫秒" : (v / 1000).toFixed(1) + " 秒";
   const iso = window.crossOriginIsolated;
   const ctl = navigator.serviceWorker && navigator.serviceWorker.controller;
-  const tap = Perf.avg("tap"), sys = Perf.avg("sys"), ai = Perf.avg("ai");
+  const tap = Perf.avg("tap"), sys = Perf.avg("sys"), ai = Perf.avg("ai"), clip = Perf.avg("clip");
   const rows = [
     ["启动用时", ms(Perf.boot), Perf.boot && Perf.boot < 1500],
     ["点击到界面更新", ms(tap), tap === null || tap < 150],
     ["系统语音开口", ms(sys), sys === null || sys < 800],
-    ["AI 语音每句生成", ms(ai), ai === null || ai < 1500],
+    ["AI 录音开口", ms(clip), clip === null || clip < 600],
+    ["AI 现场生成（没录过的句子）", ms(ai), ai === null || ai < 1500],
     ["离线缓存（秒开）", ctl ? "已开启" : "未开启，彻底关掉 App 再打开一次", !!ctl],
     ["AI 语音多核加速", iso ? `已开启（${navigator.hardwareConcurrency || "?"} 核）` : "未开启，彻底关掉 App 再打开一次", !!iso]
   ];
@@ -1469,27 +1472,41 @@ Views.me.renderVoices = function(){
   const box = $("#nv-box"); if(!box) return;
   const eng = Settings.get("engine"), st = Neural.state, cast = Settings.get("cast"), acc = Settings.get("accent");
   const v1 = Settings.get("voice1"), v2 = Settings.get("voice2");
-  const status = st === "ready" ? `<span class="ok">AI 语音已就绪</span>，离线也能用`
-    : st === "loading" ? `正在${store.get("neuralReady") ? "启动" : "下载"} AI 语音模型… <b>${Math.round(Neural.progress * 100)}%</b><div class="bar2"><i style="width:${Math.round(Neural.progress * 100)}%"></i></div>`
-    : st === "error" ? `<span class="no">AI 语音加载失败</span>：${esc(Neural.error)}<br><span class="small muted">国内网络请先打开 VPN 再重试。</span>`
-    : store.get("neuralReady") ? "AI 语音已下载，选上面的「AI 真人语音」就会启动。" : "第一次使用需要下载约 90MB 的语音模型（只下载一次，建议连 Wi-Fi），之后不联网也能用。";
+  const dl = Clips.dl, saved = Views.me._clipSaved;
+  const mb = b => (b / 1048576).toFixed(b > 10485760 ? 0 : 1) + "MB";
+  const clipLine = !Clips.supported() ? `<span class="no">这个浏览器播不了录好的语音</span>，会用现场生成或系统语音。`
+    : !Clips.idx ? "正在读取录好的语音列表…"
+    : `<span class="ok">句库里 ${Clips.count} 条句子和单词已经提前录好</span>，点了立即播放，不用等生成。`;
+  const dlLine = !Clips.idx ? "" : dl ? `正在存到手机… <b>${dl.done}/${dl.total}</b><div class="bar2"><i style="width:${Math.round(dl.done / dl.total * 100)}%"></i></div>`
+    : saved !== undefined && saved >= Clips.count ? `<span class="ok">全部录音已存到手机</span>，不联网也能秒播。`
+    : `已存到手机 ${saved == null ? "…" : saved} 条（播过的会自动存）。`;
+  const status = st === "ready" ? `<span class="ok">现场生成已就绪</span>，离线也能用`
+    : st === "loading" ? `正在${store.get("neuralReady") ? "启动" : "下载"}现场生成模型… <b>${Math.round(Neural.progress * 100)}%</b><div class="bar2"><i style="width:${Math.round(Neural.progress * 100)}%"></i></div>`
+    : st === "error" ? `<span class="no">模型加载失败</span>：${esc(Neural.error)}<br><span class="small muted">国内网络请先打开 VPN 再重试。</span>`
+    : store.get("neuralReady") ? "模型已下载，进入口语教练或连读跟读时自动启动。" : "没下载。下载约 90MB（只下载一次，建议连 Wi-Fi），AI 教练的回复和你自己输入的句子也能用 AI 声音读。";
   box.innerHTML = `
     <div class="seg" id="nv-eng" style="grid-template-columns:1fr 1fr">
       <button class="${eng === "neural" ? "on" : ""}" data-eng="neural">AI 真人语音</button>
       <button class="${eng === "system" ? "on" : ""}" data-eng="system">手机系统语音</button>
     </div>
-    <p class="small" style="margin-top:10px">${status}</p>
-    ${eng === "neural" && st !== "ready" && st !== "loading" ? `<button class="btn line sm" style="--c:var(--blue);margin-top:8px" id="nv-load">${store.get("neuralReady") ? "启动 AI 语音" : st === "error" ? "重新下载" : "下载 AI 语音（约 90MB）"}</button>` : ""}
-    <p class="small muted" style="margin-top:8px">AI 语音由开源模型 Kokoro 在你手机上生成，有 18 个美音、英音的男女声，比系统语音自然很多。还没准备好的时候，会自动先用手机系统语音。</p>
+    <p class="small" style="margin-top:10px">${clipLine}</p>
+    ${Clips.idx ? `<p class="small" style="margin-top:6px">${dlLine}</p>` : ""}
+    ${Clips.idx && !dl && !(saved >= Clips.count) ? `<button class="btn line sm" style="--c:var(--teal);margin-top:8px" id="nv-dl">全部存到手机${Clips.bytes ? `（约 ${mb(Clips.bytes)}）` : ""}</button>` : ""}
+    <div class="field" style="margin-top:14px"><label>现场生成 <span class="small muted">给没录过的句子用</span></label>
+      <p class="small">${status}</p>
+      ${eng === "neural" && st !== "ready" && st !== "loading" ? `<button class="btn line sm" style="--c:var(--blue);margin-top:8px" id="nv-load">${store.get("neuralReady") ? "现在启动" : st === "error" ? "重新下载" : "下载模型（约 90MB）"}</button>` : ""}
+    </div>
+    <p class="small muted" style="margin-top:8px">声音来自开源模型 Kokoro，有 18 个美音、英音的男女声，比系统语音自然很多。没录过、模型也没准备好的句子，会先用手机系统语音马上读出来。</p>
     <div class="field" style="margin-top:8px"><label>怎么分配声音</label>
       <div class="chips" style="flex-wrap:wrap">
         ${[["scene", "按场景分配角色"], ["random", "每句换一个人"], ["fixed", "固定用我选的"]].map(([k, n]) => `<button class="chip${cast === k ? " on" : ""}" data-cast="${k}">${n}</button>`).join("")}
       </div>
-      <p class="help">${cast === "scene" ? "比如咖啡店是活泼的店员，机场是英国空乘，约会是轻声细语的女生；对话里的回应会换另一个人说。" : cast === "random" ? "每句话随机换一个口音和性别，最能锻炼听不同的人说话。" : "所有句子都用下面选的「主讲」，回应用「对话」那个人。"}</p>
+      <p class="help">${cast === "scene" ? "比如咖啡店是活泼的店员，机场是英国空乘，约会是轻声细语的女生；对话里的回应会换另一个人说。录好的语音就是按这个分配的。" : cast === "random" ? "每句话随机换一个口音和性别，最能锻炼听不同的人说话。录好的句子会换成同性别的录音人，没录过的组合现场生成。" : "所有句子都用下面选的「主讲」，回应用「对话」那个人。录音里没有这个人说的版本时，要现场生成（会慢一些）。"}</p>
     </div>
-    <label class="check" style="margin:4px 0 6px"><input type="checkbox" id="nv-wait" ${Settings.get("aiInstant") === false ? "checked" : ""}> 每句都等 AI 声音生成完再播放（不勾选时，还没生成好的句子会先用系统语音马上读出来，反应更快）</label>
+    <label class="check" style="margin:4px 0 6px"><input type="checkbox" id="nv-wait" ${Settings.get("aiInstant") === false ? "checked" : ""}> 每句都等 AI 声音准备好再播放（不勾选时，网络慢或还没生成好的句子会先用系统语音马上读出来，反应更快）</label>
     <div class="field"><label>口音</label>
       <div class="chips">${[["both", "美音英音都要"], ["us", "只要美音"], ["gb", "只要英音"]].map(([k, n]) => `<button class="chip${acc === k ? " on" : ""}" data-acc="${k}">${n}</button>`).join("")}</div>
+      ${acc === "gb" ? `<p class="help">录好的句子大多是美音，选「只要英音」后这些句子要在手机上现场生成，会慢一些。</p>` : ""}
     </div>
     <div class="field"><label>声音列表 <span class="small muted">点 ▶ 试听</span></label>
       ${KOKORO_VOICES.map(v => `
@@ -1507,6 +1524,8 @@ Views.me.renderVoices = function(){
   const keep = fn => () => { const y = window.scrollY; fn(); this.renderVoices(); window.scrollTo(0, y); };
   $$("#nv-eng button").forEach(b => b.onclick = keep(() => { Settings.set("engine", b.dataset.eng); if(b.dataset.eng === "neural" && store.get("neuralReady")) Neural.load(); }));
   const ld = $("#nv-load"); if(ld) ld.onclick = keep(() => { Neural.worker = null; Neural.state = "off"; Neural.load(); });
+  const dlb = $("#nv-dl"); if(dlb) dlb.onclick = keep(() => { Clips.downloadAll().then(st => { Views.me._clipSaved = undefined; if(st) toast(st.failed ? `存好了 ${st.done} 条，${st.failed} 条没下载成功，可以再点一次` : "全部录音已存到手机"); if(location.hash === "#me") this.renderVoices(); }); });
+  if(Clips.idx && Views.me._clipSaved === undefined && !dl){ Views.me._clipSaved = null; Clips.saved().then(n => { Views.me._clipSaved = n; if(location.hash === "#me" && !Clips.dl) this.renderVoices(); }); }
   $("#nv-wait").onchange = e => Settings.set("aiInstant", !e.target.checked);
   $$("[data-cast]").forEach(b => b.onclick = keep(() => Settings.set("cast", b.dataset.cast)));
   $$("[data-acc]").forEach(b => b.onclick = keep(() => Settings.set("accent", b.dataset.acc)));
@@ -1515,14 +1534,17 @@ Views.me.renderVoices = function(){
   $$("[data-vtry]").forEach(b => b.onclick = async () => {
     const v = KV[b.dataset.vtry];
     const text = `Hi, I'm ${v.name}. Nice to meet you! Want to grab a coffee sometime?`;
-    if(Neural.state !== "ready"){ toast(Neural.state === "loading" ? "AI 语音还在准备，稍等一下" : "先下载 AI 语音，才能试听这些声音"); return; }
+    const rec = Clips.find(text, v.id, true);
+    if(!rec && Neural.state !== "ready"){ toast(Neural.state === "loading" ? "AI 语音还在准备，稍等一下" : "录音还没加载好，稍等一下再试"); return; }
     b.classList.add("speaking");
-    try{ const my = ++Speech.token; const blob = await Neural.audio(text, v.id, true); if(my === Speech.token) await Neural.play(blob, 1); }catch(e){ toast("试听失败：" + e.message); }
+    try{ const my = ++Speech.token; const blob = rec ? await Clips.blob(rec, text) : await Neural.audio(text, v.id, true); if(my === Speech.token) await Neural.play(blob, 1); }catch(e){ toast("试听失败：" + e.message); }
     b.classList.remove("speaking");
   });
   $("#nv-clear").onclick = async () => { await Neural.clearCache(); toast("语音缓存已清除"); };
 };
-if(Settings.get("engine") === "neural" && store.get("neuralReady")){
+/* 手机上的 AI 模型只在需要现场生成的页面（口语教练、连读跟读）才启动，平时不占手机算力 */
+function neuralSoon(){
+  if(!Neural.wanted() || !store.get("neuralReady") || Neural.state !== "off") return;
   const boot = () => Neural.load();
   if("requestIdleCallback" in window) requestIdleCallback(boot, { timeout: 3000 }); else setTimeout(boot, 1500);
 }

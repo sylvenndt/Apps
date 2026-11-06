@@ -1,6 +1,8 @@
 "use strict";
-/* AI 真人语音：开源 Kokoro-82M（Apache-2.0），在手机上本地生成，不用联网调用接口。
-   声音文件放在本站 voices/ 目录；主模型（约 90MB）第一次使用时从 Hugging Face 下载，失败则走 hf-mirror.com 镜像。 */
+/* AI 真人语音：开源 Kokoro-82M（Apache-2.0）。
+   ① 句库里的句子和单词已经提前用 Kokoro 在电脑上生成好，放在本站 audio/ 目录（Clips），点了直接播放，不用等。
+   ② 没录过的句子（AI 教练的回复、自己输入的句子）才在手机上现场生成：声音文件放在本站 voices/ 目录；
+      主模型（约 90MB）第一次使用时从 Hugging Face 下载，失败则走 hf-mirror.com 镜像。 */
 const KOKORO_VOICES = [
   { id: "af_heart",   name: "Heart",    accent: "us", gender: "f", desc: "温暖亲切，像好朋友聊天" },
   { id: "af_bella",   name: "Bella",    accent: "us", gender: "f", desc: "活泼有感染力，像咖啡店店员、派对上的朋友" },
@@ -63,6 +65,84 @@ const Voices = {
     if(!pair && scene){ const pre = Object.keys(CAST_POOLS).find(p => scene.startsWith(p)); if(pre){ const list = CAST_POOLS[pre]; pair = list[hashStr(scene) % list.length]; } }
     if(!pair) pair = [Settings.get("voice1"), Settings.get("voice2")];
     return this.fit(alt ? pair[1] : pair[0], scene || "");
+  }
+};
+
+/* ---------- 录好的语音 ---------- */
+const AUDIO_V = "?v=1";
+const cyrb53 = (str, seed = 0) => {
+  let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
+  for(let i = 0, ch; i < str.length; i++){ ch = str.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507); h1 ^= Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507); h2 ^= Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+};
+const normText = t => String(t || "").trim().replace(/\s+/g, " ");
+const AUDIO_CACHE = "fluent-audio-v1";
+const Clips = {
+  idx: null, base: "audio/", count: 0, bytes: 0, loading: null, mem: new Map(), ok: null, dl: null,
+  supported(){
+    if(this.ok === null){ try{ this.ok = !!new Audio().canPlayType('audio/ogg; codecs="opus"'); }catch(_){ this.ok = false; } }
+    return this.ok;
+  },
+  load(){
+    if(this.idx || this.loading || !this.supported() || typeof fetch === "undefined") return this.loading;
+    this.loading = fetch("audio/index.json" + AUDIO_V).then(r => { if(!r.ok) throw new Error(r.status); return r.json(); }).then(j => {
+      const idx = {}; let n = 0;
+      for(const v in j.voices){ const set = new Set(j.voices[v] ? j.voices[v].split(" ") : []); idx[v] = set; n += set.size; }
+      this.idx = idx; this.base = j.base || "audio/"; this.count = n; this.bytes = j.bytes || 0;
+      document.dispatchEvent(new Event("fluent-neural"));
+    }).catch(() => { this.loading = null; });
+    return this.loading;
+  },
+  /* 找录好的版本：先找指定的人；不要求严格时，也可以用口音允许的其他人（优先同性别） */
+  find(text, voice, strict){
+    if(!this.idx) return null;
+    const k = cyrb53(normText(text));
+    const has = v => this.idx[v] && this.idx[v].has(k);
+    if(has(voice)) return voice;
+    if(strict) return null;
+    const g = (KV[voice] || {}).gender;
+    let other = null;
+    for(const v of Voices.pool()){ if(has(v.id)){ if(v.gender === g) return v.id; other = other || v.id; } }
+    return other;
+  },
+  url(voice, text){ return this.base + voice + "/" + cyrb53(normText(text)) + ".ogg"; },
+  async blob(voice, text){
+    const url = this.url(voice, text);
+    const m = this.mem.get(url); if(m) return m;
+    const r = await fetch(url);
+    if(!r.ok) throw new Error("录音文件 " + r.status);
+    const b = await r.blob();
+    this.mem.set(url, b); if(this.mem.size > 200) this.mem.delete(this.mem.keys().next().value);
+    return b;
+  },
+  /* 把全部录音存到手机：以后每句都秒播，不联网也能用 */
+  async saved(){
+    if(!this.idx) return 0;
+    try{ const c = await caches.open(AUDIO_CACHE); return (await c.keys()).length; }catch(_){ return 0; }
+  },
+  async downloadAll(){
+    if(this.dl || !this.idx) return;
+    const urls = [];
+    for(const v in this.idx) this.idx[v].forEach(k => urls.push(new URL(this.base + v + "/" + k + ".ogg", location.href).href));
+    const st = this.dl = { total: urls.length, done: 0, failed: 0, stop: false };
+    let cache = null; try{ cache = await caches.open(AUDIO_CACHE); }catch(_){}
+    const have = new Set(); if(cache){ try{ (await cache.keys()).forEach(r => have.add(r.url)); }catch(_){} }
+    const todo = urls.filter(u => !have.has(u)); st.done = urls.length - todo.length;
+    let i = 0, last = 0;
+    const tick = () => { if(Date.now() - last > 400){ last = Date.now(); document.dispatchEvent(new Event("fluent-neural")); } };
+    const worker = async () => {
+      while(i < todo.length && !st.stop){
+        const u = todo[i++];
+        try{ const r = await fetch(u); if(r.ok){ if(cache && !navigator.serviceWorker?.controller) await cache.put(u, r.clone()); await r.arrayBuffer(); st.done++; } else st.failed++; }
+        catch(_){ st.failed++; }
+        tick();
+      }
+    };
+    await Promise.all(Array.from({ length: 6 }, worker));
+    this.dl = null; store.set("clipsAll", st.done >= st.total); document.dispatchEvent(new Event("fluent-neural"));
+    return st;
   }
 };
 
@@ -129,6 +209,16 @@ const Neural = {
   el: null, playing: null, cache: null,
   active(){ return Settings.get("engine") === "neural" && this.state === "ready"; },
   wanted(){ return Settings.get("engine") === "neural"; },
+  /* 这句话能不能用 AI 声音读（录好的，或者手机上的模型已经就绪）；同步判断，读不了就马上用系统语音 */
+  covers(text, alt){
+    if(!this.wanted()) return false;
+    const t = normText(text); if(!t) return false;
+    const voice = Voices.pick(Speech.scene, alt, t);
+    if(Clips.find(t, voice, false)) return true;
+    if(this.state === "ready" || this.mem.has(this.key(voice, t))) return true;
+    if(this.state === "off" && store.get("neuralReady")) this.load(); // 需要现场生成时才启动模型，平时不占手机算力
+    return false;
+  },
   emit(){ document.dispatchEvent(new Event("fluent-neural")); },
   urls(){ const o = store.get("kokoroUrl", null); return o ? [o] : KOKORO_URLS; },
   load(){
@@ -151,9 +241,8 @@ const Neural = {
         if(Date.now() - lastEmit > 300){ lastEmit = Date.now(); this.emit(); }
       } else if(d.type === "ready"){
         this.state = "ready"; this.progress = 1; store.set("neuralReady", true); this.emit(); this.pump();
-        // 预热：先生成一句短的，让第一次真正播放更快
-        this.audio("Hi.", Voices.pick("talk", false, "Hi."), false).catch(() => {});
-        if(typeof warmToday === "function") warmToday();
+        // 预热：先生成一句短的，让第一次真正现场生成更快
+        this.audio("Okay.", Voices.pick("talk", false, "Okay."), false).catch(() => {});
       } else if(d.type === "error"){
         this.state = "error"; this.error = d.error; this.worker.terminate(); this.worker = null; this.emit();
         this.jobs.forEach(j => j.reject(new Error(d.error))); this.jobs.clear(); this.queue = []; this.busy = null;
@@ -201,8 +290,11 @@ const Neural = {
     this.worker.postMessage({ type: "gen", id: job.id, text: job.text, voice: job.voice });
   },
   prefetch(text, scene, alt){
-    if(!this.active() || !text) return;
-    this.audio(String(text).trim(), Voices.pick(scene, alt, text), false).catch(() => {});
+    if(!this.wanted() || !text) return;
+    const t = normText(text), voice = Voices.pick(scene, alt, t);
+    const rec = Clips.find(t, voice, Settings.get("cast") === "fixed");
+    if(rec){ Clips.blob(rec, t).catch(() => {}); return; }
+    if(this.state === "ready") this.audio(t, voice, false).catch(() => {});
   },
   player(){
     if(!this.el){ this.el = new Audio(); this.el.preload = "auto"; }
@@ -210,7 +302,7 @@ const Neural = {
   },
   unlock(){ const el = this.player(); try{ el.src = SILENT_WAV; const p = el.play(); if(p && p.catch) p.catch(() => {}); }catch(_){} },
   stopPlayback(){ if(this.el){ try{ this.el.pause(); }catch(_){} } if(this.playing){ const r = this.playing; this.playing = null; r(false); } },
-  play(blob, rate){
+  play(blob, rate, onstart){
     this.stopPlayback();
     const el = this.player();
     return new Promise(resolve => {
@@ -220,6 +312,7 @@ const Neural = {
       this.playing = finish;
       el.onended = () => finish(true);
       el.onerror = () => finish(true);
+      el.onplaying = () => { el.onplaying = null; onstart && onstart(); };
       el.src = url;
       el.playbackRate = rate || 1;
       try{ el.preservesPitch = true; el.webkitPreservesPitch = true; }catch(_){}
@@ -228,24 +321,38 @@ const Neural = {
     });
   },
   async say(text, rate, alt, my){
-    const voice = Voices.pick(Speech.scene, alt, text);
-    const key = this.key(voice, text);
-    let blob = this.mem.get(key) || null;
-    if(!blob){
-      const p = this.audio(text, voice, true);
-      if(Settings.get("aiInstant") !== false){
+    const t0 = Date.now(), t = normText(text);
+    const voice = Voices.pick(Speech.scene, alt, t);
+    const fixed = Settings.get("cast") === "fixed", instant = Settings.get("aiInstant") !== false;
+    let blob = null, kind = "clip";
+    // 1. 录好的（同一个人）  2. 手机上生成过的  3. 录好的（换个同性别的人）  4. 现场生成  5. 固定发音人时，退而求其次用录好的
+    const fromClip = async v => {
+      const p = Clips.blob(v, t);
+      return instant ? Promise.race([p, sleep(1500).then(() => null)]).catch(() => null) : p.catch(() => null);
+    };
+    let rec = Clips.find(t, voice, true), tried = null; // 网络太慢没取到时不再换人重试，直接用后面的办法
+    if(rec){ tried = rec; blob = await fromClip(rec); }
+    if(!blob) blob = this.mem.get(this.key(voice, t)) || null;
+    if(!blob && !fixed && !tried && (rec = Clips.find(t, voice, false))){ tried = rec; blob = await fromClip(rec); }
+    if(!blob && this.state === "ready"){
+      kind = "ai";
+      const p = this.audio(t, voice, true);
+      if(instant){
         blob = await Promise.race([p, sleep(450).then(() => null)]);
-        if(!blob) throw new Error("not-ready"); // 先用系统语音读，生成好的下次直接用
+        if(!blob && !fixed) throw new Error("not-ready"); // 先用系统语音读，生成好的下次直接用
       } else blob = await p;
     }
+    if(!blob && fixed && !tried && (rec = Clips.find(t, voice, false))){ kind = "clip"; blob = await fromClip(rec); }
+    if(!blob) throw new Error("not-ready");
     if(my !== Speech.token) return false;
-    const ok = await this.play(blob, rate);
+    const ok = await this.play(blob, rate, () => Perf.add(kind === "clip" ? "clip" : "ai", Date.now() - t0));
     return ok && my === Speech.token;
   },
   warm(list){
-    if(!this.active()) return;
+    if(!this.wanted()) return;
     const run = () => list.slice(0, 30).forEach(([t, sc, alt]) => this.prefetch(t, sc, alt));
     if("requestIdleCallback" in window) requestIdleCallback(run, { timeout: 4000 }); else setTimeout(run, 1500);
   },
   async clearCache(){ this.mem.clear(); try{ await caches.delete("fluent-voice-v1"); }catch(_){} this.cache = null; }
 };
+Clips.load();
