@@ -310,3 +310,7 @@ button:active,.btn:active,.chip:active,.opt:active:not(:disabled),.tile:active,.
 .emo.g-tense{--e:var(--violet)} .emo.g-angry{--e:var(--crimson)} .emo.g-calm{--e:var(--teal)}
 .emo-line{margin-top:6px;font-size:13px;color:var(--muted)} .emo-line .emo{margin-left:2px}
 .tagv.new{background:var(--green);border-color:var(--green);color:#fff}
+
+/* 新版本提示 */
+.upd-bar{position:fixed;left:12px;right:12px;top:calc(env(safe-area-inset-top, 0px) + 10px);z-index:60;border:0;border-radius:14px;padding:13px 16px;
+  background:var(--green);color:#fff;font:inherit;font-weight:700;font-size:15px;box-shadow:0 6px 24px rgba(0,0,0,.25);cursor:pointer}

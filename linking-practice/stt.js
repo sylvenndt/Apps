@@ -271,13 +271,13 @@ const Listener = {
     return "system";
   },
   available(){ return this.engine() !== "none"; },
-  /* 系统识别出了这些问题，说明它在这台手机上用不了，自动模式下改用手机上识别 */
+  /* 系统识别没认出任何字，说明它在这台手机上多半用不了（比如国行安卓没有 Google 语音服务），自动模式下改用手机上识别。
+     安卓失败一次就换，其他手机失败两次才换 */
   systemFailed(err, micOk){
-    if(Settings.get("srEngine") !== "auto") return false;
-    const hard = ["network", "service-not-allowed", "language-not-supported", "start-failed"].includes(err) || (err === "not-allowed" && micOk);
-    if(!hard && !["no-speech", "audio-capture", "timeout", null, undefined, ""].includes(err)) return false;
+    if(Settings.get("srEngine") !== "auto" || !Mic.supported()) return false;
+    const hard = ["network", "service-not-allowed", "language-not-supported", "start-failed", "bad-grammar"].includes(err) || (err === "not-allowed" && micOk);
     this.fails = hard ? 99 : this.fails + 1;
-    if(this.fails >= 2 && Mic.supported()){ store.set("srBroken", true); this.fails = 0; return true; }
+    if(this.fails >= (IS_ANDROID ? 1 : 2)){ store.set("srBroken", true); this.fails = 0; return true; }
     return false;
   }
 };
@@ -295,7 +295,7 @@ function systemListen(opts){
     inner = startSystemListening(opts);
     const r = await inner.done;
     if(r.text){ Listener.fails = 0; return r; }
-    if(r.error === "aborted") return r;
+    if(cancelled && r.error === "aborted") return r;
     if(Listener.systemFailed(r.error, micOk)) return { text: "", error: "switched", detail: r.error };
     if(!r.error || r.error === "no-speech") return { ...r, error: "sys-no-speech" };
     return r;
@@ -351,7 +351,7 @@ const SR_ERR_MORE = {
   "mic-stalled": "麦克风打开了，但没收到声音。再点一次试试；还不行就把 App 关掉重新打开。",
   "mic-unsupported": "这个浏览器不能录音，请用 Safari 或 Chrome 打开。",
   "mic-inapp": "App 的内置浏览器不能用麦克风，请复制网址到 Safari 或 Chrome 打开。",
-  switched: "手机自带的语音识别在这台手机上用不了，已经改用手机上识别，再点一次就行。",
+  switched: "手机自带的语音识别在这台手机上用不了（国行安卓一般没有 Google 语音服务），已经改用手机上识别。再点一次跟读就行，第一次会先下载识别模型。",
   "sys-no-speech": "没听到声音，靠近麦克风再试一次。如果一直这样，再试一次时会自动改用手机上识别。",
   "local-declined": "没下载识别模型。可以在「我的 → 跟读识别」里随时下载。",
   "local-failed": "手机上识别失败了，再试一次。如果一直失败，到「我的 → 跟读识别」看看模型状态。"

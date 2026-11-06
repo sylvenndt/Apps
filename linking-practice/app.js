@@ -1262,13 +1262,13 @@ Views.me = {
   show(){
     const mine = Cards.user();
     $("#v-me").innerHTML = `
-      <h1>我的</h1>
+      <h1>我的 <span class="small muted" style="font-weight:500">版本 ${APP_VERSION}</span></h1>
+      <h3>跟读识别 <span class="small muted">麦克风</span></h3>
+      <div class="panel" id="stt-box"></div>
       <h3>声音检查</h3>
       <div class="panel" id="me-diag"></div>
       <h3>性能检查</h3>
       <div class="panel" id="me-perf"></div>
-      <h3>跟读识别 <span class="small muted">麦克风</span></h3>
-      <div class="panel" id="stt-box"></div>
       <h3>发音人</h3>
       <div class="panel" id="nv-box"></div>
       <h3>朗读</h3>
@@ -1766,5 +1766,21 @@ document.addEventListener("click", e => {
 });
 window.addEventListener("hashchange", route);
 route();
-if("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) navigator.serviceWorker.register("sw.js").catch(() => {});
+/* 新版本：每次打开、每次切回 App 都检查一次；新版本装好后在顶部提示，点一下就换上 */
+if("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")){
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(reg => {
+    const check = () => reg.update().catch(() => {});
+    check();
+    document.addEventListener("visibilitychange", () => { if(document.visibilityState === "visible") check(); });
+  }).catch(() => {});
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if(!hadController || document.getElementById("upd-bar")) return;
+    const bar = document.createElement("button");
+    bar.id = "upd-bar"; bar.className = "upd-bar";
+    bar.textContent = "新版本已经下载好，点这里马上换上";
+    bar.onclick = () => location.reload();
+    document.body.appendChild(bar);
+  });
+}
 Perf.boot = Math.round(performance.now());
