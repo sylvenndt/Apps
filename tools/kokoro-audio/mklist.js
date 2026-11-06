@@ -4,9 +4,9 @@ const D = '/home/claude/apps/linking-practice/';
 const ctx = { console, window: {}, document: {}, localStorage: { getItem: () => null, setItem() {} } };
 vm.createContext(ctx);
 const DEF = { cast: 'scene', accent: process.env.ACCENT || 'both', voice1: 'af_heart', voice2: 'am_michael' };
-vm.runInContext(['data.js', 'words.js', 'vocab.js'].map(f => fs.readFileSync(D + f, 'utf8')).join('\n;\n') +
+vm.runInContext(['data.js', 'emotion.js', 'words.js', 'vocab.js'].map(f => fs.readFileSync(D + f, 'utf8')).join('\n;\n') +
   `\n;const Settings = { get: k => (${JSON.stringify(DEF)})[k] };\n` + fs.readFileSync(D + 'neural.js', 'utf8') +
-  `\n;this.__o = { ALL_ITEMS, EXTRA_CARDS, TOPICS, SCENES, Voices, KOKORO_VOICES, ALL_WORDS };`, ctx);
+  `\n;this.__o = { ALL_ITEMS, EXTRA_CARDS, TOPICS, SCENES, Voices, KOKORO_VOICES, ALL_WORDS, emoOf };`, ctx);
 const o = ctx.__o;
 
 // same hash the app uses (cyrb53, base36)
@@ -28,7 +28,7 @@ const add = (text, scene, alt, prio, pos) => {
   const voice = o.Voices.pick(scene, alt, text);
   const k = voice + '|' + text;
   if (seen.has(k)) return; seen.add(k);
-  out.push({ text, voice, key: cyrb53(text), prio, pos: pos || null });
+  out.push({ text, voice, key: cyrb53(text), prio, pos: pos || null, emo: o.emoOf(text) || '' });
 };
 ['Hi.', 'Hey! This is how I sound.', 'Hello! If you can hear me, the sound is working.'].forEach(t => add(t, 'talk', false, 0));
 o.ALL_ITEMS.filter(it => !(o.SCENES.find(s => s.key === it.scene) || {}).pack).forEach(it => { add(it.en, it.scene, false, 1); add(it.reply, it.scene, true, 1); });

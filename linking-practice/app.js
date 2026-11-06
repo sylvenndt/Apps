@@ -175,11 +175,12 @@ Views.review = {
         <div id="rv-text" hidden style="margin-top:18px">
           ${type === "speak" ? `<div class="row" style="margin-bottom:10px"><button class="play sm" id="rv-play" style="--c:var(--blue)" aria-label="播放">${ICON.play}</button><button class="chip" id="rv-slow">慢速</button><button class="chip" id="rv-chunks">按意群</button></div>` : ""}
           <div class="en">${renderEn(card.chunks)}</div>
+          ${emoTag(card.en) ? `<p class="emo-line">语气：${emoTag(card.en)}</p>` : ""}
           ${card.note ? `<p class="note">${esc(card.note)}</p>` : ""}
           ${type === "listen" ? `<p class="zh blur" id="rv-zh" style="margin-top:6px" title="点一下显示中文">${esc(card.zh || "（没有中文）")}</p>` : `<p class="small" id="rv-cmp" style="margin-top:6px"></p>`}
           ${card.reply ? `<div class="row" style="margin-top:14px;align-items:flex-start">
             <button class="play sm" id="rv-reply" style="--c:var(--ink)" aria-label="播放回应">${ICON.play}</button>
-            <div><div class="small muted">对方可能这样回</div><div style="font-weight:600">${esc(card.reply)}</div></div></div>` : ""}
+            <div><div class="small muted">对方可能这样回</div><div style="font-weight:600">${esc(card.reply)}${emoTag(card.reply, "sm")}</div></div></div>` : ""}
           ${type === "listen" ? `<div class="row" style="margin-top:14px">
             <button class="btn soft sm" id="rv-shadow">${ICON.mic}<span>跟读</span></button>
             <span class="small muted grow" id="rv-shadow-res"></span></div>` : ""}
@@ -297,7 +298,7 @@ Views.library = {
               ${ALL_ITEMS.filter(x => x.scene === k).map(it => `
                 <div class="li">
                   <button class="play sm" data-p="${it.id}" style="--c:${sc.color}" aria-label="播放">${ICON.play}</button>
-                  <div class="grow"><div style="font-weight:600">${esc(it.en)}</div><div class="small muted">${esc(it.zh)}</div></div>
+                  <div class="grow"><div style="font-weight:600">${esc(it.en)}${emoTag(it.en, "sm")}</div><div class="small muted">${esc(it.zh)}</div></div>
                   ${s[it.id] ? `<span class="small muted">复习中</span>` : `<button class="chip" data-add="${it.id}">学这句</button>`}
                 </div>`).join("")}
               <div class="row" style="gap:8px;padding:10px 0 14px">
@@ -406,7 +407,7 @@ Views.listen = {
         <div class="grow"><div class="t">随身听</div><div class="small muted">自动连播所选场景的对话，一句一句磨耳朵。适合通勤、做家务时听。</div></div>
         <span class="play sm" style="--c:var(--ink)">${ICON.play}</span>
       </button>
-      <p class="small muted" style="margin-top:12px">题型有三种：听完选怎么回应、听准句子里的小词、判断在哪个场景。答错或超时的句子会自动加入复习。</p>`;
+      <p class="small muted" style="margin-top:12px">题型有四种：听完选怎么回应、听准句子里的小词、判断在哪个场景、听出说话人的语气。答错或超时的句子会自动加入复习。</p>`;
     $$("#ls-cats .chip, #ls-scenes .chip").forEach(b => b.onclick = () => { Listen.scene = b.dataset.s; const y = window.scrollY; this.renderSetup(); window.scrollTo(0, y); });
     $$("#ls-react .chip").forEach(b => b.onclick = () => { Settings.set("reactSec", +b.dataset.r); $$("#ls-react .chip").forEach(x => x.classList.toggle("on", x === b)); });
     $("#ls-speed").oninput = e => { Settings.set("speed", +e.target.value); $("#ls-speed-v").textContent = (+e.target.value).toFixed(2) + "×"; };
@@ -428,6 +429,7 @@ Views.listen = {
       if(it.single) types.push(["meaning", 60]);
       if(it.chunks && it.chunks.length >= 3) types.push(["order", 25]);
       if(it.pattern) types.push(["pattern", 45]);
+      if(EMO_QUIZ.has(emoOf(it.en)) && Neural.wanted() && Clips.find(it.en, Voices.pick(it.scene, false, it.en), false)) types.push(["tone", 30]);
       if(!types.length) return null;
       let r = Math.random() * types.reduce((a, t) => a + t[1], 0), type = types[0][0];
       for(const [t, w] of types){ if((r -= w) <= 0){ type = t; break; } }
@@ -438,6 +440,15 @@ Views.listen = {
         return { it, type, opts: shuffle([it.reply, ...others.map(x => x.reply)]), ans: it.reply, src };
       }
       if(type === "detail") return { it, type, opts: shuffle([it.en, ...dv]), ans: it.en };
+      if(type === "tone"){
+        // 干扰项选听感差别大的情绪
+        const e = emoOf(it.en), g = EMOTIONS[e].g;
+        const others = shuffle([...EMO_QUIZ].filter(x => EMOTIONS[x].g !== g));
+        const picks = []; const gs = new Set([g]);
+        for(const x of others){ if(picks.length >= 3) break; if(!gs.has(EMOTIONS[x].g)){ picks.push(x); gs.add(EMOTIONS[x].g); } }
+        for(const x of others){ if(picks.length >= 3) break; if(!picks.includes(x)) picks.push(x); }
+        return { it, type, opts: shuffle([EMOTIONS[e].zh, ...picks.map(x => EMOTIONS[x].zh)]), ans: EMOTIONS[e].zh, emo: e };
+      }
       if(type === "word"){
         const me = ALL_WORDS.find(x => x.w === it.word) || { cat: "o", l: "B1" };
         // 单词题用拼写相近的词做干扰，例句题用同词性的词
@@ -475,7 +486,7 @@ Views.listen = {
     Speech.scene = q.it.scene;
     { const nq = Listen.qs[Listen.i + 1]; if(nq) Neural.prefetch(nq.it.en, nq.it.scene); if(q.it.reply) Neural.prefetch(q.it.reply, q.it.scene, true); }
     clearInterval(Listen.timer);
-    const prompt = { reply: "对方这样说，你会怎么回？", detail: "你听到的是哪一句？注意小词", scene: "这句话最可能在哪里听到？", word: q.it.single ? "你听到的是哪个词？" : "这句话里用到了哪个词？", pattern: "这句话用的是哪个句型？", meaning: "听到的这个词是什么意思？", order: "按听到的顺序点意群" }[q.type];
+    const prompt = { reply: "对方这样说，你会怎么回？", detail: "你听到的是哪一句？注意小词", scene: "这句话最可能在哪里听到？", word: q.it.single ? "你听到的是哪个词？" : "这句话里用到了哪个词？", pattern: "这句话用的是哪个句型？", meaning: "听到的这个词是什么意思？", order: "按听到的顺序点意群", tone: "说话的人是什么语气？" }[q.type];
     $("#v-listen").innerHTML = `
       <div class="row between">
         <button class="icon-btn" id="ls-quit" aria-label="退出">${ICON.x}</button>
@@ -593,6 +604,10 @@ Views.listen = {
       r.ansZh = pt ? pt.zh : "";
       r.why = `这句话用了「${esc(q.ans)}」：${esc(pt ? pt.zh : "")}。`;
       if(r.picked){ const pp = [...PATTERNS, ...STRUCTURES].find(x => x.p === r.picked); r.pickedZh = pp ? esc(pp.zh) : ""; }
+    } else if(q.type === "tone"){
+      const E = EMOTIONS[q.emo];
+      r.why = `「${esc(E.zh)}」的语气：${EMO_CUES[E.g]}美国人很多时候靠语气表达态度，同一句话换个语气，意思可能完全不同。`;
+      if(r.picked){ const pk = Object.values(EMOTIONS).find(x => x.zh === r.picked); r.pickedZh = pk ? `「${esc(pk.zh)}」一般是：${EMO_CUES[pk.g]}` : ""; }
     } else if(q.type === "order"){
       r.ans = it.chunks.join(" / ");
       r.ansZh = it.zh;
@@ -653,8 +668,9 @@ Views.listen = {
       <div class="hf-stage">
         <div class="row" style="justify-content:center">${bulletHTML(it.scene, true)}</div>
         <div class="en hf-en${h.showText ? "" : " blur"}" id="hf-en">${renderEn(it.chunks)}</div>
+        ${h.showText && emoTag(it.en) ? `<p style="text-align:center;margin-top:6px">${emoTag(it.en)}</p>` : ""}
         <p class="zh blur" id="hf-zh">${esc(it.zh || "")}</p>
-        ${h.reply && it.reply ? `<p class="hf-reply${h.showText ? "" : " blur"}">${esc(it.reply)}</p>` : ""}
+        ${h.reply && it.reply ? `<p class="hf-reply${h.showText ? "" : " blur"}">${esc(it.reply)}${h.showText ? emoTag(it.reply, "sm") : ""}</p>` : ""}
       </div>
       <div class="row" style="justify-content:center;gap:18px">
         <button class="icon-btn" id="hf-prev" aria-label="上一句"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
@@ -1496,7 +1512,7 @@ Views.me.renderVoices = function(){
       <p class="small">${status}</p>
       ${eng === "neural" && st !== "ready" && st !== "loading" ? `<button class="btn line sm" style="--c:var(--blue);margin-top:8px" id="nv-load">${store.get("neuralReady") ? "现在启动" : st === "error" ? "重新下载" : "下载模型（约 90MB）"}</button>` : ""}
     </div>
-    <p class="small muted" style="margin-top:8px">声音来自开源模型 Kokoro，有 18 个美音、英音的男女声，比系统语音自然很多。没录过、模型也没准备好的句子，会先用手机系统语音马上读出来。</p>
+    <p class="small muted" style="margin-top:8px">声音来自开源模型 Kokoro，有 ${KOKORO_VOICES.length} 个美音、英音的男女声，比系统语音自然很多。句库里的对话录音时还按每句话的情绪调了语气（开心、惊讶、抱歉、难过、生气、紧张、温柔、小声说等 ${Object.keys(EMOTIONS).length} 种），在句子旁边能看到。没录过、模型也没准备好的句子，会先用手机系统语音马上读出来。</p>
     <div class="field" style="margin-top:8px"><label>怎么分配声音</label>
       <div class="chips" style="flex-wrap:wrap">
         ${[["scene", "按场景分配角色"], ["random", "每句换一个人"], ["fixed", "固定用我选的"]].map(([k, n]) => `<button class="chip${cast === k ? " on" : ""}" data-cast="${k}">${n}</button>`).join("")}
@@ -1512,7 +1528,7 @@ Views.me.renderVoices = function(){
       ${KOKORO_VOICES.map(v => `
         <div class="vrow${acc !== "both" && v.accent !== acc ? " dim" : ""}">
           <button class="play sm" data-vtry="${v.id}" style="--c:${v.gender === "f" ? "var(--pink)" : "var(--blue)"}" aria-label="试听 ${esc(v.name)}">${ICON.play}</button>
-          <div class="grow"><div><b>${esc(v.name)}</b> <span class="tagv">${v.accent === "us" ? "美音" : "英音"}${v.gender === "f" ? "女" : "男"}</span></div><div class="small muted">${esc(v.desc)}</div></div>
+          <div class="grow"><div><b>${esc(v.name)}</b> <span class="tagv">${v.accent === "us" ? "美音" : "英音"}${v.gender === "f" ? "女" : "男"}</span>${v.fresh ? ` <span class="tagv new">新</span>` : ""}</div><div class="small muted">${esc(v.desc)}</div></div>
           <div class="vpick">
             <button class="chip${v1 === v.id ? " on" : ""}" data-v1="${v.id}">主讲</button>
             <button class="chip${v2 === v.id ? " on" : ""}" data-v2="${v.id}">对话</button>

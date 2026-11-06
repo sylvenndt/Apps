@@ -3,6 +3,7 @@
   --blue:#0039A6; --orange:#FF6319; --green:#00933C; --purple:#B933AD; --yellow:#FCCC0A;
   --red:#EE352E; --brown:#996633; --lime:#5DAE36;
   --teal:#0F8C80; --indigo:#4B4FD1; --amber:#D98200; --cyan:#0093C4; --pink:#E2427A; --slate:#5F6B78; --crimson:#B3261E; --olive:#6E8B1E; --violet:#7B4BC9; --mint:#0E9F6E; --sand:#A9802F; --plum:#8E3B8C; --rose:#D0456F;
+  --navy:#1F3A93; --gold:#C99A06; --forest:#2E7D32; --scarlet:#D7263D; --ocean:#006D8F; --berry:#A4167A; --rust:#B5501E; --coral:#E8505B;
   --ok:#00933C; --bad:#EE352E;
   --sans:"Archivo", -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", sans-serif;
   --tab-h:64px;
@@ -13,7 +14,7 @@
     --bg:#121418; --surface:#1B1E24; --sunk:#23272E; --ink:#ECEDEF; --muted:#9BA1A9; --rule:#2D323A;
     --blue:#5B8BFF; --orange:#FF7A3D; --green:#2DBE6A; --purple:#D466C8; --yellow:#FCCC0A;
     --red:#FF5A52; --brown:#C08A55; --lime:#7CCB52;
-    --teal:#2BB3A5; --indigo:#7B7FFF; --amber:#F2A12E; --cyan:#2DB8E8; --pink:#FF6B9A; --slate:#8C98A6; --crimson:#E5554D; --olive:#9DBE3E; --violet:#A47CF0; --mint:#34C892; --sand:#D2A954; --plum:#C66BC3; --rose:#F07399; --ok:#2DBE6A; --bad:#FF5A52;
+    --teal:#2BB3A5; --indigo:#7B7FFF; --amber:#F2A12E; --cyan:#2DB8E8; --pink:#FF6B9A; --slate:#8C98A6; --crimson:#E5554D; --olive:#9DBE3E; --violet:#A47CF0; --mint:#34C892; --sand:#D2A954; --plum:#C66BC3; --rose:#F07399; --navy:#6E8CFF; --gold:#E8B923; --forest:#5DBB63; --scarlet:#FF5C6E; --ocean:#3BB4D9; --berry:#E05BB5; --rust:#E57A45; --coral:#FF7B84; --ok:#2DBE6A; --bad:#FF5A52;
     color-scheme: dark;
   }
 }
@@ -300,3 +301,12 @@ button:active,.btn:active,.chip:active,.opt:active:not(:disabled),.tile:active,.
 .wrow,.vrow,.topic,.mycard,.scene-items .li{content-visibility:auto;contain-intrinsic-size:auto 76px}
 .perf-row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid var(--rule);font-size:14px}
 .perf-row:first-child{border-top:0}
+
+/* 情绪语气标签 */
+.emo{--e:var(--slate);display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:600;line-height:18px;vertical-align:2px;
+  color:var(--e);background:color-mix(in srgb, var(--e) 13%, transparent);white-space:nowrap;letter-spacing:0}
+.emo.sm{font-size:11px;padding:0 7px;margin-left:6px}
+.emo.g-warm{--e:var(--orange)} .emo.g-hot{--e:var(--red)} .emo.g-soft{--e:var(--pink)} .emo.g-low{--e:var(--indigo)}
+.emo.g-tense{--e:var(--violet)} .emo.g-angry{--e:var(--crimson)} .emo.g-calm{--e:var(--teal)}
+.emo-line{margin-top:6px;font-size:13px;color:var(--muted)} .emo-line .emo{margin-left:2px}
+.tagv.new{background:var(--green);border-color:var(--green);color:#fff}

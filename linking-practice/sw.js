@@ -1,10 +1,10 @@
 /* 离线缓存：版本化的文件直接用缓存（秒开），页面本身联网最多等 2.5 秒，
    超时就先用缓存版本。顺便给页面加上跨源隔离头，让 AI 语音可以多核运算。
    录好的语音（audio/*.ogg）单独存在 fluent-audio-v1 里，App 更新时不会被清掉。 */
-const CACHE = "daily-english-v14";
-const V = "?v=14";
+const CACHE = "daily-english-v15";
+const V = "?v=15";
 const AUDIO_CACHE = "fluent-audio-v1";
-const CORE = ["./", "index.html", "styles.css" + V, "data.js" + V, "words.js" + V, "vocab.js" + V, "linking.js" + V, "core.js" + V, "replies_zh.js" + V, "neural.js" + V, "app.js" + V, "manifest.json", "icon-192.png", "icon-512.png", "icon-180.png"];
+const CORE = ["./", "index.html", "styles.css" + V, "data.js" + V, "emotion.js" + V, "words.js" + V, "vocab.js" + V, "linking.js" + V, "core.js" + V, "replies_zh.js" + V, "neural.js" + V, "app.js" + V, "manifest.json", "icon-192.png", "icon-512.png", "icon-180.png"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE)).catch(() => {}));

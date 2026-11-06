@@ -5,7 +5,7 @@ const DEF={cast:'scene',accent:'both',voice1:'af_heart',voice2:'am_michael'};
 vm.runInContext(['data.js','linking.js'].map(f=>fs.readFileSync(D+f,'utf8')).join('\n;\n')+`\n;const Settings={get:k=>(${JSON.stringify(DEF)})[k]};\n`+fs.readFileSync(D+'neural.js','utf8')+`\n;this.__o={LINK_PRESETS,ALL_ITEMS,tokenize,detectLinks,Voices,cyrb53,normText};`,ctx);
 const o=ctx.__o, all=JSON.parse(fs.readFileSync('list_all.json'));
 const have=new Set(all.map(x=>x.voice+'|'+x.key)); const out=[];
-const add=(t,prio)=>{t=o.normText(t); if(!t) return; const v=o.Voices.pick('link',false,t); const k=o.cyrb53(t); if(have.has(v+'|'+k)) return; have.add(v+'|'+k); out.push({text:t,voice:v,key:k,prio,pos:null});};
+const add=(t,prio)=>{t=o.normText(t); if(!t) return; const v=o.Voices.pick('link',false,t); const k=o.cyrb53(t); if(have.has(v+'|'+k)) return; have.add(v+'|'+k); out.push({text:t,voice:v,key:k,prio,pos:null,emo:''});};
 o.LINK_PRESETS.forEach(t=>add(t,4.6));
 o.LINK_PRESETS.forEach(t=>o.detectLinks(o.tokenize(t)).forEach(l=>add(`${l.a} ${l.b}`,4.7)));
 o.ALL_ITEMS.forEach(it=>o.detectLinks(o.tokenize(it.en)).forEach(l=>add(`${l.a} ${l.b}`,7)));

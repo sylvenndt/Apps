@@ -283,6 +283,139 @@ const MORE_ITEMS = {
 };
 SCENES.forEach(s => { if(MORE_ITEMS[s.key]) s.items.push(...MORE_ITEMS[s.key]); });
 
+/* 新增场景（第 4 项是情绪：说这句的人/回应的人，空着就是平常语气） */
+SCENES.push(
+  { key:"interview", name:"求职面试", en:"Job interview", mark:"J", color:"var(--navy)", items:[
+    ["Thanks for | having me | today.", "谢谢你们今天邀请我来。", "Of course. Did you find the place okay?", "polite/friendly"],
+    ["I've been working | in marketing | for about five years.", "我做市场营销大约五年了。", "Great. What drew you to this role?", "confident/polite"],
+    ["I'm really excited | about this opportunity.", "我对这个机会真的很期待。", "We're excited to meet you, too.", "cheerful/friendly"],
+    ["One of my strengths | is that I'm | really organized.", "我的优点之一是做事很有条理。", "Can you give me an example of that?", "confident/curious"],
+    ["I tend to | take on | too much at once.", "我容易一下子揽太多事。", "That's an honest answer. How do you handle it?", "embarrassed/friendly"],
+    ["I'm looking for | a place where | I can keep growing.", "我想找一个能持续成长的地方。", "That's exactly what we offer here.", "confident/cheerful"],
+    ["Could you tell me | a little more | about the team?", "能再多介绍一下团队吗？", "Sure. It's a small team of six people.", "curious/friendly"],
+    ["What does | a typical day | look like?", "平时一天的工作是什么样的？", "It really depends, but there's a lot of client work.", "curious/polite"],
+    ["Sorry, I'm | a little nervous.", "不好意思，我有点紧张。", "That's totally normal. Take your time.", "nervous/caring"],
+    ["That's a great question. | Let me think | for a second.", "好问题，让我想一下。", "Sure, no rush.", "polite/friendly"],
+    ["Is the position | remote | or in the office?", "这个职位是远程还是坐班？", "It's hybrid. Three days in the office.", "curious/polite"],
+    ["What are | the next steps?", "接下来的流程是怎样的？", "We'll get back to you by the end of next week.", "polite/polite"],
+    ["I'd love to | be part of | the team.", "我很想加入这个团队。", "Thanks for coming in. We'll be in touch soon.", "cheerful/friendly"],
+    ["We'd like to | offer you | the position!", "我们决定录用你！", "Oh wow, thank you so much! I'm thrilled.", "cheerful/excited"]
+  ]},
+  { key:"campus", name:"校园课堂", en:"On campus", mark:"Q", color:"var(--gold)", dark:true, items:[
+    ["Is anyone | sitting here?", "这儿有人坐吗？", "Nope, go ahead.", "polite/friendly"],
+    ["Did I miss | anything important?", "我错过什么重要的了吗？", "Just a few slides. I'll send you my notes.", "worried/friendly"],
+    ["When is | the paper | due?", "论文什么时候交？", "Next Friday at midnight.", "curious/"],
+    ["Is there any way | I could get an extension?", "有没有可能延期交？", "I can give you until Monday, but no later.", "nervous/confident"],
+    ["I pulled | an all-nighter | for the exam.", "为了考试我熬了个通宵。", "No wonder you look so tired.", "tired/playful"],
+    ["Do you wanna | start a study group?", "要不要组个学习小组？", "Yes! I could really use the help.", "friendly/cheerful"],
+    ["I totally | bombed | the midterm.", "期中考试我考砸了。", "Don't worry, you can still pull your grade up.", "sad/caring"],
+    ["I got an A | on my final!", "我期末考了 A！", "No way! Congrats, you worked so hard.", "excited/excited"],
+    ["What's | your major?", "你学什么专业？", "Computer science. How about you?", "curious/friendly"],
+    ["When are | your office hours?", "您的答疑时间是什么时候？", "Tuesdays from two to four. Stop by anytime.", "polite/friendly"],
+    ["Could you | go over | that last part again?", "最后那部分能再讲一遍吗？", "Of course. Let's go back a slide.", "polite/friendly"],
+    ["I'm so stressed | about finals.", "期末考试让我压力好大。", "Same. Let's grab dinner and take a break.", "worried/caring"],
+    ["Can I | borrow your notes?", "能借你的笔记看看吗？", "Sure, just give them back by Thursday.", "polite/friendly"],
+    ["The professor | is super strict | about attendance.", "这个教授点名特别严。", "Yeah, don't even think about skipping.", "annoyed/playful"]
+  ]},
+  { key:"drive", name:"开车租车", en:"Driving & cars", mark:"V", color:"var(--forest)", items:[
+    ["Can I get | twenty dollars | on pump three?", "三号油泵加二十美元的油。", "Sure. Anything else for you?", "polite/polite"],
+    ["I'd like to | rent a car | for three days.", "我想租三天车。", "Sure. Do you have a reservation?", "polite/polite"],
+    ["Does it come | with insurance?", "这个含保险吗？", "Basic coverage is included.", "curious/polite"],
+    ["I think | I have | a flat tire.", "我好像爆胎了。", "Pull over somewhere safe. I'll come help.", "worried/caring"],
+    ["My car | won't start.", "我的车打不着火了。", "Sounds like the battery. Do you have jumper cables?", "annoyed/confident"],
+    ["Is it okay | to park here?", "这里能停车吗？", "Only for two hours, so watch the time.", "polite/friendly"],
+    ["Watch out! | That car | just ran a red light!", "小心！那辆车闯红灯了！", "Whoa, that was way too close.", "scared/scared"],
+    ["Can you | pull over | for a second?", "能靠边停一下吗？", "Sure, what's up?", "polite/curious"],
+    ["Traffic | is backed up | for miles.", "堵车堵了好几英里。", "Ugh. We're definitely going to be late.", "annoyed/annoyed"],
+    ["Where's | the nearest | gas station?", "最近的加油站在哪儿？", "There's one right off the next exit.", "curious/friendly"],
+    ["License and registration, | please.", "请出示驾照和行驶证。", "Sure, officer. Here you go.", "confident/nervous"],
+    ["Was I | going too fast?", "我开太快了吗？", "You were doing fifty in a thirty-five.", "nervous/confident"],
+    ["Let's | take turns | driving.", "我们轮流开吧。", "Good idea. I'll take over after lunch.", "friendly/friendly"],
+    ["I got | another | parking ticket.", "我又被贴罚单了。", "Seriously? That's the second one this month.", "disappointed/surprised"]
+  ]},
+  { key:"help", name:"紧急求助", en:"Emergencies", mark:"A", color:"var(--scarlet)", items:[
+    ["Help! | Somebody | call nine-one-one!", "救命！快打 911！", "I'm calling right now!", "scared/urgent"],
+    ["I'd like to | report | a stolen wallet.", "我要报案，钱包被偷了。", "Okay. When did you last see it?", "worried/polite"],
+    ["I lost | my passport.", "我的护照丢了。", "Don't panic. Let's call the embassy.", "scared/caring"],
+    ["Is everyone | okay?", "大家都没事吧？", "I think so. Just a little shaken up.", "worried/relieved"],
+    ["There's a fire | in the building!", "楼里着火了！", "Take the stairs! Don't use the elevator!", "scared/urgent"],
+    ["Where's | the nearest | hospital?", "最近的医院在哪儿？", "About ten minutes away. I'll drive you.", "urgent/caring"],
+    ["I think I'm having | an allergic reaction.", "我好像过敏了。", "Do you have an EpiPen with you?", "scared/urgent"],
+    ["Someone | broke into | my car.", "有人撬了我的车。", "Oh no. Did they take anything?", "angry/worried"],
+    ["I'm lost, | and my phone | is dead.", "我迷路了，手机也没电了。", "Here, you can use mine.", "worried/caring"],
+    ["Please | try to | stay calm.", "请尽量保持冷静。", "Okay. Okay, I'm trying.", "confident/nervous"],
+    ["Can you describe | what happened?", "你能描述一下发生了什么吗？", "It all happened so fast.", "polite/nervous"],
+    ["My friend | just fainted!", "我朋友晕倒了！", "Lay her down and check if she's breathing.", "scared/urgent"],
+    ["Thank goodness | you're okay.", "谢天谢地你没事。", "I was so scared.", "relieved/scared"],
+    ["Do you need me | to call anyone | for you?", "需要我帮你打电话给谁吗？", "Could you call my sister, please?", "caring/grateful"]
+  ]},
+  { key:"tech", name:"手机电脑", en:"Tech trouble", mark:"@", color:"var(--ocean)", items:[
+    ["My laptop | keeps freezing.", "我的笔记本一直卡死。", "Have you tried restarting it?", "annoyed/friendly"],
+    ["Have you tried | turning it off | and on again?", "你试过关机再开吗？", "Yes, like five times.", "playful/annoyed"],
+    ["The Wi-Fi | keeps cutting out.", "Wi-Fi 老是断。", "Try moving closer to the router.", "annoyed/friendly"],
+    ["I forgot | my password | again.", "我又忘记密码了。", "No problem. I'll send you a reset link.", "embarrassed/polite"],
+    ["My screen | is cracked.", "我的屏幕碎了。", "Ouch. Is it still under warranty?", "disappointed/curious"],
+    ["You're | on mute.", "你开着静音呢。", "Oops, sorry! Can you hear me now?", "playful/embarrassed"],
+    ["Can you | share your screen?", "你能共享一下屏幕吗？", "Sure, give me one sec.", "polite/friendly"],
+    ["Sorry, | your video | froze.", "不好意思，你的画面卡住了。", "Ugh, my internet is so slow today.", "polite/annoyed"],
+    ["My phone | is about to die.", "我手机快没电了。", "Here, I've got a charger.", "worried/friendly"],
+    ["Did you | back up | your files?", "你备份文件了吗？", "Uh, no. Should I have?", "curious/nervous"],
+    ["I think | I got hacked.", "我好像被盗号了。", "Change your passwords right away.", "scared/urgent"],
+    ["The app | crashes | every time I open it.", "这个 App 一打开就闪退。", "Try deleting it and downloading it again.", "annoyed/friendly"],
+    ["How do I | turn this off?", "这个怎么关？", "Just hold down the power button.", "curious/friendly"],
+    ["It finally | works!", "终于好了！", "Nice! See, that wasn't so bad.", "relieved/playful"]
+  ]},
+  { key:"holiday", name:"节日送礼", en:"Holidays & gifts", mark:"G", color:"var(--berry)", items:[
+    ["Happy | birthday!", "生日快乐！", "Aw, thank you! You remembered!", "cheerful/grateful"],
+    ["I got you | a little | something.", "我给你准备了个小礼物。", "You didn't have to do that!", "playful/surprised"],
+    ["I love it! | How did you know?", "我太喜欢了！你怎么知道的？", "I have my ways.", "excited/playful"],
+    ["What are you doing | for Thanksgiving?", "感恩节你打算怎么过？", "I'm flying home to see my parents.", "curious/friendly"],
+    ["Merry Christmas | and happy new year!", "圣诞快乐，新年快乐！", "Same to you! Have a great holiday.", "cheerful/cheerful"],
+    ["Do you have | any New Year's resolutions?", "你有什么新年目标吗？", "I want to finally learn how to cook.", "curious/cheerful"],
+    ["Should we bring | something | to the potluck?", "百乐餐我们要带点什么吗？", "Maybe a salad or some dessert.", "friendly/friendly"],
+    ["This is | way too much. | Thank you.", "这也太破费了，谢谢你。", "You deserve it.", "grateful/tender"],
+    ["Let's do | a gift exchange | this year.", "今年我们交换礼物吧。", "Fun! What's the price limit?", "cheerful/excited"],
+    ["Congratulations | on your wedding!", "新婚快乐！", "Thank you! We're so glad you could make it.", "cheerful/grateful"],
+    ["It's the thought | that counts.", "心意最重要。", "Well, I hope you like it.", "tender/embarrassed"],
+    ["Can I | open it now?", "我现在能拆吗？", "Go for it!", "excited/playful"],
+    ["Trick | or treat!", "不给糖就捣蛋！", "Oh, I love your costume! Here you go.", "playful/cheerful"],
+    ["I'm so sorry | I missed | your party.", "很抱歉错过了你的派对。", "Don't worry about it. We'll celebrate again soon.", "apologetic/friendly"]
+  ]},
+  { key:"sports", name:"看球赛", en:"Game day", mark:"K", color:"var(--rust)", items:[
+    ["Who are you | rooting for?", "你支持哪个队？", "The Lakers, obviously.", "curious/confident"],
+    ["What's | the score?", "比分多少？", "It's tied, three to three.", "curious/excited"],
+    ["Did you | see that play?", "你看到刚才那一下了吗？", "That was insane!", "excited/excited"],
+    ["Come on, ref! | That was a foul!", "裁判！那明明是犯规！", "Is he even watching the game?", "angry/annoyed"],
+    ["Let's go! | Let's go!", "冲啊！冲啊！", "Yes! We're back in this!", "excited/excited"],
+    ["I can't believe | we lost | again.", "真不敢相信我们又输了。", "There's always next season.", "disappointed/caring"],
+    ["Wanna come over | and watch the game?", "要不要来我家看球？", "For sure. I'll bring the wings.", "friendly/cheerful"],
+    ["That was | a really | close game.", "这场比分咬得好紧。", "I was on the edge of my seat.", "friendly/excited"],
+    ["Are they | any good | this year?", "他们今年厉害吗？", "They're actually not bad.", "curious/confident"],
+    ["We're going | to the playoffs!", "我们进季后赛了！", "Finally! It's been years.", "excited/relieved"],
+    ["Grab me a drink | while you're up?", "你起身的话顺便帮我拿杯喝的？", "Only if you get the next round.", "playful/playful"],
+    ["Do you play | any sports?", "你玩什么运动吗？", "I play pickup basketball on weekends.", "curious/friendly"],
+    ["He's | the best player | in the league.", "他是联盟里最好的球员。", "No way. He's totally overrated.", "confident/playful"],
+    ["This game | is so | boring.", "这场比赛好无聊。", "Yeah, let's change the channel.", "tired/tired"]
+  ]},
+  { key:"feelings", name:"心情与安慰", en:"Feelings & comfort", mark:"I", color:"var(--coral)", items:[
+    ["I'm having | a really | rough day.", "我今天过得特别糟。", "Aw, I'm sorry. Want to talk about it?", "sad/caring"],
+    ["I'm | so proud | of you.", "我真为你骄傲。", "Thank you. That means a lot.", "tender/grateful"],
+    ["I feel like | nobody's listening | to me.", "我感觉没人听我说话。", "I'm listening. Go ahead.", "sad/caring"],
+    ["It's not | the end | of the world.", "天塌不下来。", "I know. It just feels like it right now.", "caring/sad"],
+    ["I'm | freaking out | right now.", "我现在快崩溃了。", "Okay, breathe. We'll figure it out.", "nervous/caring"],
+    ["That | really hurt | my feelings.", "那真的伤到我了。", "I'm so sorry. I didn't mean it that way.", "sad/apologetic"],
+    ["I'm so mad | I could | scream.", "我气得想尖叫。", "Whoa, what happened?", "angry/surprised"],
+    ["I'm | so done | with this.", "我真受够了。", "Then maybe it's time for a change.", "annoyed/caring"],
+    ["You've | got | this.", "你可以的。", "Thanks. I really needed to hear that.", "confident/grateful"],
+    ["I miss you | so much.", "我好想你。", "I miss you too. I'll be home soon.", "tender/tender"],
+    ["I'm | over the moon!", "我开心得要飞起来了！", "I can tell! What happened?", "excited/curious"],
+    ["I didn't mean | to snap at you.", "我不是故意冲你发火的。", "It's okay. We're all stressed.", "apologetic/caring"],
+    ["I just need | some time | to myself.", "我只是需要一点自己的时间。", "Of course. Text me when you're ready.", "tired/caring"],
+    ["Don't be | so hard | on yourself.", "别对自己太苛刻。", "I'll try.", "caring/sad"],
+    ["What | a relief!", "真是松了一口气！", "Told you it would be fine.", "relieved/playful"]
+  ]}
+);
+
 /* 话题包：社交搭讪、约会调情、购物、闲聊（编号话题，默认不进每日新句，在句库里点 ☆ 加入） */
 const PACKS = [
   { cat:"social", color:"var(--cyan)", list:[
@@ -561,11 +694,11 @@ PACKS.forEach(g => g.list.forEach(([key, name, en, items], i) => SCENES.push({ k
 
 /* 场景分类 */
 const CATS = [
-  { key:"daily", name:"日常生活", scenes:["cafe","dining","shop","grocery","health","home","gym"] },
-  { key:"travel", name:"旅行出行", scenes:["travel","fly","ride"] },
-  { key:"social", name:"社交搭讪", scenes:["talk","chat","bar","party","react","plans"] },
+  { key:"daily", name:"日常生活", scenes:["cafe","dining","shop","grocery","health","home","gym","campus","help"] },
+  { key:"travel", name:"旅行出行", scenes:["travel","fly","ride","drive"] },
+  { key:"social", name:"社交搭讪", scenes:["talk","chat","bar","party","react","plans","feelings","holiday","sports"] },
   { key:"date", name:"约会调情", scenes:["date"] },
-  { key:"comm", name:"工作沟通", scenes:["work","phone","fix","bank"] }
+  { key:"comm", name:"工作沟通", scenes:["work","interview","phone","fix","bank","tech"] }
 ];
 PACKS.forEach(g => CATS.find(c => c.key === g.cat).scenes.push(...g.list.map(x => x[0])));
 SCENES.forEach(s => { s.cat = (CATS.find(c => c.scenes.includes(s.key)) || CATS[0]).key; });
@@ -665,6 +798,18 @@ TOPICS.push(
   { scene:"t-food", title:"推荐餐厅", them:"Friend", opener:"I'm starving. Where should we eat?", opener_zh:"我饿死了，去哪儿吃？", brief:"朋友饿了，问去哪儿吃。推荐一家你喜欢的店，说说招牌菜，问问对方想吃什么。", hints:["Have you tried…?", "Their … is amazing", "Are you in the mood for…?"] },
   { scene:"t-weekend", title:"周一聊周末", them:"Coworker", opener:"Happy Monday! How was your weekend?", opener_zh:"周一快乐！周末过得怎么样？", brief:"周一同事问你周末过得怎么样。聊聊你做了什么，有什么好玩或者好笑的事。", hints:["It was pretty…", "We ended up…", "How about yours?"] }
 );
+TOPICS.push(
+  { scene:"interview", title:"面试自我介绍", them:"Interviewer", opener:"So, tell me a little about yourself.", opener_zh:"先简单介绍一下你自己吧。", emo:"polite", brief:"求职面试开场，面试官请你介绍自己。说说你的经历、擅长什么，以及为什么想要这份工作。", hints:["I've been working in…", "One of my strengths is…", "I'm really excited about…"] },
+  { scene:"interview", title:"问面试官问题", them:"Interviewer", opener:"Do you have any questions for us?", opener_zh:"你有什么想问我们的吗？", emo:"friendly", brief:"面试快结束了，面试官问你有没有问题。问问团队情况、平时的工作内容和接下来的流程。", hints:["Could you tell me more about…", "What does a typical day look like?", "What are the next steps?"] },
+  { scene:"campus", title:"跟教授请求延期", them:"Professor", opener:"Hi, come on in. What can I do for you?", opener_zh:"你好，进来吧。有什么事吗？", emo:"friendly", brief:"这周你生病了，作业来不及交。去教授办公室说明情况，礼貌地请求延期几天。", hints:["I wanted to ask about…", "I've been sick this week", "Would it be possible to…"] },
+  { scene:"drive", title:"租车柜台取车", them:"Agent", opener:"Hi! Do you have a reservation with us?", opener_zh:"你好！你在我们这里有预订吗？", emo:"cheerful", brief:"在机场租车柜台取车。确认预订，问清楚保险包含什么、还车时要不要加满油。", hints:["I have a reservation under…", "Does it include…", "Do I need to return it full?"] },
+  { scene:"help", title:"报案：钱包被偷", them:"Officer", opener:"What seems to be the problem?", opener_zh:"出什么事了？", emo:"confident", brief:"你在地铁上钱包被偷了。去警察局报案，说清楚什么时候、在哪里、钱包里有什么。", hints:["I'd like to report…", "It happened around…", "It had my…"] },
+  { scene:"tech", title:"视频会议卡了", them:"Coworker", opener:"Hey, can you hear me? Your video's frozen.", opener_zh:"嘿，能听到我吗？你的画面卡住了。", emo:"worried", brief:"视频会议时你的网络很卡。跟同事说明情况，请他们先继续，你换个网络马上回来。", hints:["Sorry, my connection is…", "Go ahead without me", "I'll be right back"] },
+  { scene:"holiday", title:"收到生日礼物", them:"Friend", opener:"Happy birthday! Here, open it!", opener_zh:"生日快乐！来，拆开看看！", emo:"excited", brief:"朋友送你生日礼物。拆开后表达惊喜和感谢，说说你为什么喜欢。", hints:["You didn't have to…", "I love it!", "How did you know…?"] },
+  { scene:"sports", title:"约朋友看球", them:"Friend", opener:"Are you watching the game tonight?", opener_zh:"今晚你看比赛吗？", emo:"excited", brief:"朋友问你今晚看不看球。约他来你家一起看，商量谁带吃的喝的，再聊聊你支持哪个队。", hints:["Wanna come over…", "I'll grab…", "Who are you rooting for?"] },
+  { scene:"feelings", title:"安慰失业的朋友", them:"Friend", opener:"I just got laid off. I don't even know what to do.", opener_zh:"我刚被裁员了，我都不知道该怎么办。", emo:"sad", brief:"朋友刚失业，心情很差。先表达关心、听他说，再鼓励他，提议一起出去散散心。", hints:["I'm so sorry", "That must be really hard", "You've got this"] },
+  { scene:"feelings", title:"分享好消息", them:"Friend", opener:"You look really happy. What's going on?", opener_zh:"你看起来特别开心，发生什么事了？", emo:"curious", brief:"你刚收到一个好消息（升职、考试通过或者申请成功）。兴奋地告诉朋友，说说经过和你的心情。", hints:["Guess what!", "I'm over the moon", "I still can't believe…"] }
+);
 TOPICS.forEach(t => { t.cat = SCENE_CAT_OF(t.scene); });
 function SCENE_CAT_OF(k){ const c = CATS.find(c => c.scenes.includes(k)); return c ? c.key : "daily"; }
 
@@ -695,7 +840,8 @@ const LINK_PRESETS = [
 
 const ALL_ITEMS = [];
 SCENES.forEach(s => s.items.forEach((it, i) => ALL_ITEMS.push({
-  id: `${s.key}-${i}`, scene: s.key, en: it[0].replace(/\s*\|\s*/g, " ").trim(), chunks: it[0].split("|").map(x => x.trim()), zh: it[1], reply: it[2]
+  id: `${s.key}-${i}`, scene: s.key, en: it[0].replace(/\s*\|\s*/g, " ").trim(), chunks: it[0].split("|").map(x => x.trim()), zh: it[1], reply: it[2],
+  emo: (it[3] || "").split("/")[0] || "", remo: (it[3] || "").split("/")[1] || ""
 })));
 const SCENE_BY_KEY = Object.fromEntries(SCENES.map(s => [s.key, s]));
 const ITEM_BY_ID = Object.fromEntries(ALL_ITEMS.map(x => [x.id, x]));

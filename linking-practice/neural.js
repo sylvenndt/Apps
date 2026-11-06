@@ -17,11 +17,20 @@ const KOKORO_VOICES = [
   { id: "am_puck",    name: "Puck",     accent: "us", gender: "m", desc: "轻快俏皮，像朋友、酒保" },
   { id: "am_echo",    name: "Echo",     accent: "us", gender: "m", desc: "普通邻家，像路人、司机" },
   { id: "am_eric",    name: "Eric",     accent: "us", gender: "m", desc: "商务正式，像销售、客户" },
+  { id: "af_alloy",   name: "Alloy",    accent: "us", gender: "f", desc: "中性干脆，像租车柜台、IT 同事", fresh: true },
+  { id: "af_jessica", name: "Jessica",  accent: "us", gender: "f", desc: "开朗爱笑，像大学同学", fresh: true },
+  { id: "af_river",   name: "River",    accent: "us", gender: "f", desc: "清爽年轻，像刚毕业的求职者", fresh: true },
+  { id: "am_liam",    name: "Liam",     accent: "us", gender: "m", desc: "阳光少年感，像大学室友", fresh: true },
+  { id: "am_onyx",    name: "Onyx",     accent: "us", gender: "m", desc: "低沉浑厚，像面试官、球迷大叔", fresh: true },
+  { id: "am_santa",   name: "Santa",    accent: "us", gender: "m", desc: "慈祥爽朗的老爷爷，节日场景限定", fresh: true, special: true },
   { id: "bf_emma",    name: "Emma",     accent: "gb", gender: "f", desc: "优雅温和，像空乘、酒店前台" },
   { id: "bf_isabella",name: "Isabella", accent: "gb", gender: "f", desc: "年轻干脆，像伦敦的上班族" },
   { id: "bm_george",  name: "George",   accent: "gb", gender: "m", desc: "绅士沉稳，像教授、管家" },
   { id: "bm_fable",   name: "Fable",    accent: "gb", gender: "m", desc: "很有故事感，像导游、讲解员" },
-  { id: "bm_lewis",   name: "Lewis",    accent: "gb", gender: "m", desc: "年轻爽朗，像英国朋友" }
+  { id: "bm_lewis",   name: "Lewis",    accent: "gb", gender: "m", desc: "年轻爽朗，像英国朋友" },
+  { id: "bf_alice",   name: "Alice",    accent: "gb", gender: "f", desc: "温柔知性，像英国闺蜜", fresh: true },
+  { id: "bf_lily",    name: "Lily",     accent: "gb", gender: "f", desc: "甜美清亮，像伦敦女生", fresh: true },
+  { id: "bm_daniel",  name: "Daniel",   accent: "gb", gender: "m", desc: "斯文稳重，像英国的技术支持", fresh: true }
 ];
 const KV = Object.fromEntries(KOKORO_VOICES.map(v => [v.id, v]));
 /* 场景配音：[说这句话的人, 回应的人] */
@@ -31,7 +40,9 @@ const CAST = {
   fly: ["bf_emma", "am_michael"], ride: ["am_echo", "af_heart"], talk: ["af_heart", "am_puck"], chat: ["am_puck", "af_heart"],
   bar: ["am_puck", "af_bella"], party: ["af_sky", "bm_lewis"], react: ["af_heart", "am_puck"], plans: ["am_puck", "af_sky"],
   date: ["af_nicole", "am_michael"], work: ["af_sarah", "am_eric"], phone: ["af_kore", "am_eric"], fix: ["am_eric", "af_sarah"],
-  bank: ["af_aoede", "am_michael"], vocab: ["af_nova", "am_michael"], pattern: ["af_aoede", "bm_george"], structure: ["bm_george", "af_aoede"]
+  bank: ["af_aoede", "am_michael"], vocab: ["af_nova", "am_michael"], pattern: ["af_aoede", "bm_george"], structure: ["bm_george", "af_aoede"],
+  interview: ["af_river", "am_onyx"], campus: ["am_liam", "af_jessica"], drive: ["af_alloy", "am_fenrir"], help: ["af_jessica", "am_michael"],
+  tech: ["bm_daniel", "af_alloy"], holiday: ["bf_lily", "am_santa"], sports: ["am_onyx", "am_puck"], feelings: ["af_heart", "bf_alice"]
 };
 const CAST_POOLS = {
   "s-": [["am_puck", "af_heart"], ["af_bella", "bm_lewis"], ["af_sky", "am_echo"], ["bf_isabella", "am_puck"], ["am_eric", "af_sarah"]],
@@ -44,13 +55,14 @@ const hashStr = s => { let h = 0; for(const c of String(s)) h = (h * 31 + c.char
 const Voices = {
   pool(){
     const a = Settings.get("accent");
-    const p = KOKORO_VOICES.filter(v => a === "both" || v.accent === a);
+    const p = KOKORO_VOICES.filter(v => !v.special && (a === "both" || v.accent === a));
     return p.length ? p : KOKORO_VOICES;
   },
   /* 口音被过滤掉时，换成同性别的另一个声音 */
   fit(id, salt){
-    const pool = this.pool();
+    const pool = this.pool(), me = KV[id];
     if(pool.some(v => v.id === id)) return id;
+    if(me && me.special){ const a = Settings.get("accent"); if(a === "both" || me.accent === a) return id; }
     const g = (KV[id] || {}).gender || "f";
     const same = pool.filter(v => v.gender === g);
     const list = same.length ? same : pool;
@@ -69,7 +81,7 @@ const Voices = {
 };
 
 /* ---------- 录好的语音 ---------- */
-const AUDIO_V = "?v=2";
+const AUDIO_V = "?v=3";
 const cyrb53 = (str, seed = 0) => {
   let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
   for(let i = 0, ch; i < str.length; i++){ ch = str.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); }
@@ -80,7 +92,7 @@ const cyrb53 = (str, seed = 0) => {
 const normText = t => String(t || "").trim().replace(/\s+/g, " ");
 const AUDIO_CACHE = "fluent-audio-v1";
 const Clips = {
-  idx: null, base: "audio/", count: 0, bytes: 0, loading: null, mem: new Map(), ok: null, dl: null,
+  idx: null, rev: {}, revTag: "", base: "audio/", count: 0, bytes: 0, loading: null, mem: new Map(), ok: null, dl: null,
   supported(){
     if(this.ok === null){ try{ this.ok = !!new Audio().canPlayType('audio/ogg; codecs="opus"'); }catch(_){ this.ok = false; } }
     return this.ok;
@@ -90,8 +102,10 @@ const Clips = {
     this.loading = fetch("audio/index.json" + AUDIO_V).then(r => { if(!r.ok) throw new Error(r.status); return r.json(); }).then(j => {
       const idx = {}; let n = 0;
       for(const v in j.voices){ const set = new Set(j.voices[v] ? j.voices[v].split(" ") : []); idx[v] = set; n += set.size; }
-      this.idx = idx; this.base = j.base || "audio/"; this.count = n; this.bytes = j.bytes || 0;
+      const rev = {}; for(const v in (j.rev || {})) rev[v] = new Set(j.rev[v].split(" "));
+      this.idx = idx; this.rev = rev; this.revTag = j.revTag || "1"; this.base = j.base || "audio/"; this.count = n; this.bytes = j.bytes || 0;
       document.dispatchEvent(new Event("fluent-neural"));
+      if(store.get("clipsPruned") !== AUDIO_V){ const go = () => this.prune(); if("requestIdleCallback" in window) requestIdleCallback(go, { timeout: 8000 }); else setTimeout(go, 5000); }
     }).catch(() => { this.loading = null; });
     return this.loading;
   },
@@ -107,7 +121,19 @@ const Clips = {
     for(const v of Voices.pool()){ if(has(v.id)){ if(v.gender === g) return v.id; other = other || v.id; } }
     return other;
   },
-  url(voice, text){ return this.base + voice + "/" + cyrb53(normText(text)) + ".ogg"; },
+  /* 重新录过（加了情绪）的句子地址带 ?e=，手机上旧的录音缓存就不会再被用到 */
+  keyUrl(voice, k){ return this.base + voice + "/" + k + ".ogg" + (this.rev[voice] && this.rev[voice].has(k) ? "?e=" + this.revTag : ""); },
+  url(voice, text){ return this.keyUrl(voice, cyrb53(normText(text))); },
+  allUrls(){ const urls = []; for(const v in this.idx) this.idx[v].forEach(k => urls.push(new URL(this.keyUrl(v, k), location.href).href)); return urls; },
+  /* 清掉手机里已经过时的旧录音 */
+  async prune(){
+    if(!this.idx) return;
+    try{
+      const c = await caches.open(AUDIO_CACHE), ok = new Set(this.allUrls());
+      for(const r of await c.keys()) if(!ok.has(r.url)) await c.delete(r);
+      store.set("clipsPruned", AUDIO_V); store.set("clipsAll", false);
+    }catch(_){}
+  },
   async blob(voice, text){
     const url = this.url(voice, text);
     const m = this.mem.get(url); if(m) return m;
@@ -120,12 +146,11 @@ const Clips = {
   /* 把全部录音存到手机：以后每句都秒播，不联网也能用 */
   async saved(){
     if(!this.idx) return 0;
-    try{ const c = await caches.open(AUDIO_CACHE); return (await c.keys()).length; }catch(_){ return 0; }
+    try{ const c = await caches.open(AUDIO_CACHE), ok = new Set(this.allUrls()); return (await c.keys()).filter(r => ok.has(r.url)).length; }catch(_){ return 0; }
   },
   async downloadAll(){
     if(this.dl || !this.idx) return;
-    const urls = [];
-    for(const v in this.idx) this.idx[v].forEach(k => urls.push(new URL(this.base + v + "/" + k + ".ogg", location.href).href));
+    const urls = this.allUrls();
     const st = this.dl = { total: urls.length, done: 0, failed: 0, stop: false };
     let cache = null; try{ cache = await caches.open(AUDIO_CACHE); }catch(_){}
     const have = new Set(); if(cache){ try{ (await cache.keys()).forEach(r => have.add(r.url)); }catch(_){} }
