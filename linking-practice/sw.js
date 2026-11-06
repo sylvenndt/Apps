@@ -1,7 +1,7 @@
 /* 离线缓存：版本化的文件直接用缓存（秒开），页面本身联网最多等 2.5 秒，
    超时就先用缓存版本。顺便给页面加上跨源隔离头，让 AI 语音可以多核运算。 */
-const CACHE = "daily-english-v11";
-const V = "?v=11";
+const CACHE = "daily-english-v12";
+const V = "?v=12";
 const CORE = ["./", "index.html", "styles.css" + V, "data.js" + V, "words.js" + V, "vocab.js" + V, "linking.js" + V, "core.js" + V, "replies_zh.js" + V, "neural.js" + V, "app.js" + V, "manifest.json", "icon-192.png", "icon-512.png", "icon-180.png"];
 
 self.addEventListener("install", e => {

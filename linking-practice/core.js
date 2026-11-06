@@ -15,7 +15,8 @@ const store = {
     this._c.set(k, v);
     return v === undefined ? d : v;
   },
-  set(k, v){ this._c.set(k, v); try{ localStorage.setItem("fluent:" + k, JSON.stringify(v)); }catch(_){} },
+  ver: 0,
+  set(k, v){ this._c.set(k, v); this.ver++; try{ localStorage.setItem("fluent:" + k, JSON.stringify(v)); }catch(_){} },
   keys(){ try{ return Object.keys(localStorage).filter(k => k.startsWith("fluent:")).map(k => k.slice(7)); }catch(_){ return []; } }
 };
 // 其他标签页改了数据时，丢掉缓存
@@ -174,6 +175,12 @@ const SRS = {
 };
 
 /* ---------- 朗读（美音） ---------- */
+/* 性能统计：用来在「我的」里显示真实耗时 */
+const Perf = {
+  boot: 0, data: { sys: [], ai: [], tap: [] },
+  add(k, ms){ const a = this.data[k]; a.push(ms); if(a.length > 20) a.shift(); },
+  avg(k){ const a = this.data[k]; return a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null; }
+};
 const TTS_OK = "speechSynthesis" in window && typeof SpeechSynthesisUtterance !== "undefined";
 const IS_ANDROID = /Android/i.test(navigator.userAgent);
 const IS_IOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
@@ -189,6 +196,7 @@ const Speech = {
     if(/aria|jenny|guy|ava|zoe|evan|allison|samantha|nicky|tom|susan|joelle|nathan/i.test(v.name)) s += 15;
     if(/google/i.test(v.name)) s += 20;
     if(/^en[-_]US/i.test(v.lang)) s += 10;
+    if(v.localService === true) s += 25; // 本地语音不用联网，开口更快
     if(/novelty|bells|bubbles|bad news|good news|boing|cellos|whisper|zarvox|trinoids|wobble|organ|jester|superstar|albert|fred|junior|ralph|kathy|bahh|eddy|flo|grandma|grandpa|reed|rocko|sandy|shelley/i.test(v.name)) s -= 100;
     return s;
   },
@@ -257,7 +265,7 @@ const Speech = {
         const v = cands[Math.min(attempt, cands.length - 1)];
         if(v){ u.voice = v; u.lang = String(v.lang || "en-US").replace("_", "-"); }
         u.rate = rate; u.volume = 1;
-        u.onstart = () => { started = true; this.stats.started++; this.stats.lastError = ""; if(attempt) Settings.set("goodVoice", v ? v.name : ""); };
+        u.onstart = () => { started = true; this.stats.started++; Perf.add("sys", Date.now() - t0); this.stats.lastError = ""; if(attempt) Settings.set("goodVoice", v ? v.name : ""); };
         u.onend = () => {
           // 有的手机没有英文语音时会“瞬间结束”而不出声
           if(!started && Date.now() - t0 < 250 && words > 1 && my === this.token) this.fail("instant-end");

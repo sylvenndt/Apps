@@ -151,6 +151,9 @@ const Neural = {
         if(Date.now() - lastEmit > 300){ lastEmit = Date.now(); this.emit(); }
       } else if(d.type === "ready"){
         this.state = "ready"; this.progress = 1; store.set("neuralReady", true); this.emit(); this.pump();
+        // 预热：先生成一句短的，让第一次真正播放更快
+        this.audio("Hi.", Voices.pick("talk", false, "Hi."), false).catch(() => {});
+        if(typeof warmToday === "function") warmToday();
       } else if(d.type === "error"){
         this.state = "error"; this.error = d.error; this.worker.terminate(); this.worker = null; this.emit();
         this.jobs.forEach(j => j.reject(new Error(d.error))); this.jobs.clear(); this.queue = []; this.busy = null;
@@ -158,7 +161,7 @@ const Neural = {
         const job = this.jobs.get(d.id); this.jobs.delete(d.id); this.busy = null;
         if(job){
           if(d.error) job.reject(new Error(d.error));
-          else { const blob = encodeWav(d.pcm, d.sr); this.remember(job.key, blob); job.resolve(blob); }
+          else { Perf.add("ai", Date.now() - job.t0); const blob = encodeWav(d.pcm, d.sr); this.remember(job.key, blob); job.resolve(blob); }
         }
         this.pump();
       }
@@ -194,7 +197,7 @@ const Neural = {
   },
   pump(){
     if(this.busy || this.state !== "ready" || !this.queue.length) return;
-    const job = this.queue.shift(); this.busy = job; this.jobs.set(job.id, job);
+    const job = this.queue.shift(); this.busy = job; this.jobs.set(job.id, job); job.t0 = Date.now();
     this.worker.postMessage({ type: "gen", id: job.id, text: job.text, voice: job.voice });
   },
   prefetch(text, scene, alt){
@@ -226,10 +229,23 @@ const Neural = {
   },
   async say(text, rate, alt, my){
     const voice = Voices.pick(Speech.scene, alt, text);
-    const blob = await this.audio(text, voice, true);
+    const key = this.key(voice, text);
+    let blob = this.mem.get(key) || null;
+    if(!blob){
+      const p = this.audio(text, voice, true);
+      if(Settings.get("aiInstant") !== false){
+        blob = await Promise.race([p, sleep(450).then(() => null)]);
+        if(!blob) throw new Error("not-ready"); // 先用系统语音读，生成好的下次直接用
+      } else blob = await p;
+    }
     if(my !== Speech.token) return false;
     const ok = await this.play(blob, rate);
     return ok && my === Speech.token;
+  },
+  warm(list){
+    if(!this.active()) return;
+    const run = () => list.slice(0, 30).forEach(([t, sc, alt]) => this.prefetch(t, sc, alt));
+    if("requestIdleCallback" in window) requestIdleCallback(run, { timeout: 4000 }); else setTimeout(run, 1500);
   },
   async clearCache(){ this.mem.clear(); try{ await caches.delete("fluent-voice-v1"); }catch(_){} this.cache = null; }
 };

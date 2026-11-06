@@ -295,3 +295,8 @@ button:active,.btn:active,.chip:active,.opt:active:not(:disabled),.tile:active,.
 .topic:active,.scene-head:active{opacity:.6}
 .play:active{transform:scale(.94)}
 .view{animation:none}
+
+/* v12：长列表只渲染屏幕上看得见的部分 */
+.wrow,.vrow,.topic,.mycard,.scene-items .li{content-visibility:auto;contain-intrinsic-size:auto 76px}
+.perf-row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid var(--rule);font-size:14px}
+.perf-row:first-child{border-top:0}

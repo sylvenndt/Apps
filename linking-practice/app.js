@@ -51,8 +51,14 @@ function topicOfDay(){
   const days = Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 86400000);
   return days % TOPICS.length;
 }
+function warmToday(){
+  if(typeof Neural === "undefined" || !Neural.active()) return;
+  const ids = [...SRS.dueIds(), ...SRS.newIds(Settings.get("newPerDay"))].slice(0, 25);
+  Neural.warm(ids.map(id => Cards.get(id)).filter(Boolean).map(c => [c.en, c.scene]));
+}
 Views.today = {
   show(){
+    setTimeout(warmToday, 1200);
     const d = new Date();
     const due = SRS.dueIds().length, nw = SRS.newIds(Settings.get("newPerDay")).length;
     const lg = Log.today(), t = TOPICS[topicOfDay()];
@@ -1214,6 +1220,8 @@ Views.me = {
       <h1>我的</h1>
       <h3>声音检查</h3>
       <div class="panel" id="me-diag"></div>
+      <h3>性能检查</h3>
+      <div class="panel" id="me-perf"></div>
       <h3>发音人</h3>
       <div class="panel" id="nv-box"></div>
       <h3>朗读</h3>
@@ -1273,6 +1281,7 @@ Views.me = {
     fill(); Views.me.fillVoices = fill;
     this.renderVoices();
     this.renderDiag();
+    this.renderPerf();
     sel.onchange = () => { Settings.set("voice", sel.value); Speech.say("Hey! This is how I sound."); };
     $("#me-try").onclick = () => Speech.say("Hey! This is how I sound.");
     $("#me-speed").oninput = e => { const v = +e.target.value; Settings.set("speed", v); $("#me-speed-v").textContent = v.toFixed(2) + "×"; };
@@ -1435,6 +1444,25 @@ Views.words = {
   }
 };
 
+/* ================= 性能检查 ================= */
+Views.me.renderPerf = function(){
+  const box = $("#me-perf"); if(!box) return;
+  const ms = v => v === null ? "—" : v < 1000 ? v + " 毫秒" : (v / 1000).toFixed(1) + " 秒";
+  const iso = window.crossOriginIsolated;
+  const ctl = navigator.serviceWorker && navigator.serviceWorker.controller;
+  const tap = Perf.avg("tap"), sys = Perf.avg("sys"), ai = Perf.avg("ai");
+  const rows = [
+    ["启动用时", ms(Perf.boot), Perf.boot && Perf.boot < 1500],
+    ["点击到界面更新", ms(tap), tap === null || tap < 150],
+    ["系统语音开口", ms(sys), sys === null || sys < 800],
+    ["AI 语音每句生成", ms(ai), ai === null || ai < 1500],
+    ["离线缓存（秒开）", ctl ? "已开启" : "未开启，彻底关掉 App 再打开一次", !!ctl],
+    ["AI 语音多核加速", iso ? `已开启（${navigator.hardwareConcurrency || "?"} 核）` : "未开启，彻底关掉 App 再打开一次", !!iso]
+  ];
+  box.innerHTML = rows.map(([k, v, good]) => `<div class="perf-row"><span>${k}</span><b class="${good ? "ok" : "mid"}">${esc(String(v))}</b></div>`).join("") +
+    `<p class="small muted" style="margin-top:8px">数字是你这台手机上的实测值，多用一会儿会更准。觉得哪里慢，把这一块截图发给我。</p>`;
+};
+
 /* ================= AI 发音人 ================= */
 document.addEventListener("fluent-neural", () => { if(location.hash === "#me") Views.me.renderVoices(); });
 Views.me.renderVoices = function(){
@@ -1459,6 +1487,7 @@ Views.me.renderVoices = function(){
       </div>
       <p class="help">${cast === "scene" ? "比如咖啡店是活泼的店员，机场是英国空乘，约会是轻声细语的女生；对话里的回应会换另一个人说。" : cast === "random" ? "每句话随机换一个口音和性别，最能锻炼听不同的人说话。" : "所有句子都用下面选的「主讲」，回应用「对话」那个人。"}</p>
     </div>
+    <label class="check" style="margin:4px 0 6px"><input type="checkbox" id="nv-wait" ${Settings.get("aiInstant") === false ? "checked" : ""}> 每句都等 AI 声音生成完再播放（不勾选时，还没生成好的句子会先用系统语音马上读出来，反应更快）</label>
     <div class="field"><label>口音</label>
       <div class="chips">${[["both", "美音英音都要"], ["us", "只要美音"], ["gb", "只要英音"]].map(([k, n]) => `<button class="chip${acc === k ? " on" : ""}" data-acc="${k}">${n}</button>`).join("")}</div>
     </div>
@@ -1478,6 +1507,7 @@ Views.me.renderVoices = function(){
   const keep = fn => () => { const y = window.scrollY; fn(); this.renderVoices(); window.scrollTo(0, y); };
   $$("#nv-eng button").forEach(b => b.onclick = keep(() => { Settings.set("engine", b.dataset.eng); if(b.dataset.eng === "neural" && store.get("neuralReady")) Neural.load(); }));
   const ld = $("#nv-load"); if(ld) ld.onclick = keep(() => { Neural.worker = null; Neural.state = "off"; Neural.load(); });
+  $("#nv-wait").onchange = e => Settings.set("aiInstant", !e.target.checked);
   $$("[data-cast]").forEach(b => b.onclick = keep(() => Settings.set("cast", b.dataset.cast)));
   $$("[data-acc]").forEach(b => b.onclick = keep(() => Settings.set("accent", b.dataset.acc)));
   $$("[data-v1]").forEach(b => b.onclick = keep(() => { Settings.set("voice1", b.dataset.v1); if(Settings.get("cast") !== "fixed") Settings.set("cast", "fixed"); }));
@@ -1572,18 +1602,35 @@ Views.me.renderDiag = function(){
 
 /* ================= 路由 ================= */
 const ROUTES = ["today", "review", "library", "words", "listen", "speak", "link", "me"];
+const VIEW_VER = {}, VIEW_SCROLL = {};
+const KEEP_VIEWS = new Set(["today", "library", "words", "listen", "speak", "link", "me"]);
+let currentView = null;
 function route(){
   let v = location.hash.slice(1) || "today";
   if(!ROUTES.includes(v)) v = "today";
+  if(currentView) VIEW_SCROLL[currentView] = window.scrollY;
   Speech.stop(); stopActiveListen(); clearInterval(Listen.timer);
   if(Listen.state === "hf" && v !== "listen") Views.listen.stopHF();
   if(Link.recording){ Link.recording = false; clearInterval(Link.recTimer); try{ Link.recorder && Link.recorder.stop(); }catch(_){} Link.stream && Link.stream.getTracks().forEach(t => t.stop()); }
   ROUTES.forEach(x => $("#v-" + x).hidden = x !== v);
   const tab = ["review", "library", "words"].includes(v) ? "today" : v;
   $$(".tabs a").forEach(a => a.classList.toggle("on", a.dataset.tab === tab));
-  Views[v].show();
-  window.scrollTo(0, 0);
+  // 数据没变、页面也渲染过：直接显示，不重画（切换标签瞬间完成）
+  const ver = store.ver + "|" + dayKey();
+  const keep = KEEP_VIEWS.has(v) && VIEW_VER[v] === ver && $("#v-" + v).childElementCount && !(v === "listen" && Listen.state === "hf");
+  if(!keep){ Views[v].show(); VIEW_VER[v] = ver; }
+  const y = (keep || ["library", "words", "speak", "me"].includes(v)) ? (VIEW_SCROLL[v] || 0) : 0;
+  window.scrollTo(0, y);
+  currentView = v;
 }
+// 页面内部交互也会改数据，记下最新版本，避免下次白白重画
+document.addEventListener("click", () => { if(currentView) setTimeout(() => { VIEW_VER[currentView] = store.ver + "|" + dayKey(); }, 0); }, true);
+// 统计从手指按下到界面更新的时间
+let tapAt = 0;
+document.addEventListener("pointerdown", () => { tapAt = performance.now(); }, { passive: true, capture: true });
+document.addEventListener("click", () => { const t = tapAt; if(t) requestAnimationFrame(() => setTimeout(() => { Perf.add("tap", Math.round(performance.now() - t)); }, 0)); tapAt = 0; });
+// 让手机浏览器显示按下效果
+document.addEventListener("touchstart", () => {}, { passive: true });
 document.addEventListener("click", e => {
   const a = e.target.closest("[data-act]");
   if(!a) return;
@@ -1596,3 +1643,4 @@ document.addEventListener("click", e => {
 window.addEventListener("hashchange", route);
 route();
 if("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) navigator.serviceWorker.register("sw.js").catch(() => {});
+Perf.boot = Math.round(performance.now());
