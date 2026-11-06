@@ -2,7 +2,7 @@
 /* 读完之后的评价：
    ① 发音打分：微软 Azure 发音评测。拿录音和「应该读的句子」对比，给总分、准确、流利、完整、语调，
       每个词、每个音都有分数，还能听出你把哪个音读成了什么。免费档每月 5 小时。
-   ② 语法纠错：用 Claude（「我的」里填的 Anthropic 密钥），改语法、换更地道的说法。 */
+   ② 语法纠错：用「我的 → AI 批改」里选的 DeepSeek 或 Claude，改语法、换更地道的说法。 */
 const AZURE_REGIONS = [
   ["eastasia", "东亚（香港）"], ["japaneast", "日本东部"], ["southeastasia", "东南亚（新加坡）"],
   ["eastus", "美国东部"], ["westus2", "美国西部 2"], ["westeurope", "西欧"]
@@ -230,24 +230,15 @@ const PronUI = {
   }
 };
 
-/* ---------- 语法纠错（Claude） ---------- */
+/* ---------- 语法纠错（DeepSeek 或 Claude） ---------- */
 const FIX_SYSTEM = `You check a Chinese learner's spoken English sentence.
 Input JSON: "meaning_zh" (what they wanted to say, in Chinese; may be empty), "model_answer" (one natural English way to say it; may be empty), "said" (what speech recognition heard; it may contain small recognition mistakes — ignore obvious ones).
 Judge whether "said" is correct, natural spoken American English that expresses the meaning. A different wording than model_answer is fine if it's natural.
 Reply with ONLY a JSON object, no markdown:
 {"verdict": "perfect" | "good" | "fix", "corrected": string (the learner's sentence fixed with minimal changes; same as said if nothing to fix), "natural": string (how an American would most naturally say it), "errors": [{"from": string, "to": string, "why": string}] (max 3; "why" in Simplified Chinese, short, about grammar or word choice), "tip": string (one short encouraging sentence in Simplified Chinese)}`;
 async function grammarFix({ said, zh, model }){
-  const resp = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-api-key": Settings.get("apiKey"), "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-    body: JSON.stringify({ model: Settings.get("model"), max_tokens: 600, system: FIX_SYSTEM, messages: [{ role: "user", content: JSON.stringify({ meaning_zh: zh || "", model_answer: model || "", said }) }] })
-  }).catch(() => { throw new Error("连不上 Anthropic 的服务器"); });
-  if(!resp.ok) throw new Error(resp.status === 401 ? "Anthropic 密钥不对" : "Claude 返回错误 " + resp.status);
-  const j = await resp.json();
-  const t = (j.content || []).map(c => c.text || "").join("").trim();
-  const m = t.match(/\{[\s\S]*\}/);
-  if(!m) throw new Error("Claude 的回复看不懂");
-  return JSON.parse(m[0]);
+  const t = await AI.chat({ system: FIX_SYSTEM, user: JSON.stringify({ meaning_zh: zh || "", model_answer: model || "", said }), maxTokens: 600 });
+  return AI.json(t);
 }
 function fixHTML(f, said){
   const badge = { perfect: ["ok", "完全正确"], good: ["ok", "意思对，可以更地道"], fix: ["no", "有需要改的地方"] }[f.verdict] || ["mid", "看看建议"];
@@ -267,7 +258,7 @@ async function evaluateSpeech(box, rec, { ref, zh, model, grammar = false, compa
   if(!box) return;
   const parts = [];
   const canPron = Pron.ready() && rec && rec.audio && ref;
-  const canFix = grammar && Settings.get("apiKey") && rec && rec.text;
+  const canFix = grammar && AI.ready() && rec && rec.text;
   if(!canPron && !canFix){
     if(rec && rec.audio && !Pron.ready()){
       box.innerHTML = `<p class="small muted" style="margin-top:8px">想要逐词逐音的发音打分？到「我的 → 发音打分」填上免费的 Azure 密钥。</p>`;

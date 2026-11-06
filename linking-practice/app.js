@@ -755,25 +755,8 @@ async function callCoach(said){
     conversation: Speak.turns.filter(x => x.who === "me" || x.who === "them").map(x => ({ who: x.who, text: x.who === "me" ? x.natural : x.text })),
     learner_said: said
   };
-  let resp;
-  try{
-    resp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-api-key": Settings.get("apiKey"), "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-      body: JSON.stringify({ model: Settings.get("model"), max_tokens: 1500, system: COACH_SYSTEM, messages: [{ role: "user", content: JSON.stringify(payload) }] })
-    });
-  }catch(e){ throw new Error("连不上 Anthropic 的服务器。检查一下网络（在中国大陆需要能访问外网）。"); }
-  if(!resp.ok){
-    let msg = ""; try{ msg = (await resp.json()).error.message; }catch(_){}
-    if(resp.status === 401) throw new Error("API 密钥不对。去「我的」里检查一下。");
-    if(resp.status === 429 || resp.status === 529) throw new Error("服务繁忙或额度用完了，过一会儿再试。");
-    if(resp.status === 400 && /credit/i.test(msg)) throw new Error("API 账户余额不足，需要先充值。");
-    throw new Error(`请求失败（${resp.status}）${msg ? "：" + msg : ""}`);
-  }
-  const data = await resp.json();
-  const text = (data.content || []).map(c => c.text || "").join("");
-  const a = text.indexOf("{"), b = text.lastIndexOf("}");
-  try{ return JSON.parse(text.slice(a, b + 1)); }catch(_){ throw new Error("返回的内容没法解析，再试一次。"); }
+  const text = await AI.chat({ system: COACH_SYSTEM, user: JSON.stringify(payload), maxTokens: 1500 });
+  return AI.json(text);
 }
 
 function coachPrompt(said){
@@ -786,7 +769,7 @@ Views.speak = {
   renderSession(){
     const t = currentTopic();
     Speech.scene = t.scene || "talk";
-    const hasKey = !!Settings.get("apiKey");
+    const hasKey = AI.ready();
     $("#v-speak").innerHTML = `
       <div class="row" style="margin-bottom:14px"><button class="icon-btn" id="sp-back" aria-label="返回话题">${ICON.back}</button>${bulletHTML(t.scene)}<h2 style="margin:0">${esc(t.title)}</h2></div>
       <p class="brief">${esc(t.brief)}</p>
@@ -798,8 +781,8 @@ Views.speak = {
           <button class="mic" id="sp-mic" aria-label="语音输入">${ICON.mic}</button>
         </div>
         <div id="sp-eval"></div>
-        <button class="btn line block" style="--c:var(--green);margin-top:10px;padding:13px" id="sp-send">${hasKey ? "改成地道说法" : "复制，去 Claude 批改"}</button>
-        ${hasKey ? "" : `<p class="small muted" style="margin-top:8px">在「我的」里填上 Anthropic API 密钥，就能直接在这里批改，并且接着对话。</p>`}
+        <button class="btn line block" style="--c:var(--green);margin-top:10px;padding:13px" id="sp-send">${hasKey ? "改成地道说法" : "复制，去 AI 聊天里批改"}</button>
+        ${hasKey ? "" : `<p class="small muted" style="margin-top:8px">在「我的 → AI 批改」里填上 DeepSeek 或 Claude 的密钥，就能直接在这里批改，并且接着对话。</p>`}
         <p class="err" id="sp-err" hidden></p>
       </div>`;
     $("#sp-back").onclick = () => { stopActiveListen(); Speak.topic = null; Speak.custom = null; Speak.turns = []; this.renderList(); };
@@ -868,9 +851,9 @@ Views.speak = {
     const input = $("#sp-input"), said = input.value.trim(), err = $("#sp-err");
     err.hidden = true;
     if(!said){ input.focus(); toast("先说一句或打一句"); return; }
-    if(!Settings.get("apiKey")){
+    if(!AI.ready()){
       const text = coachPrompt(said);
-      try{ await navigator.clipboard.writeText(text); toast("已复制，打开 Claude 粘贴就行"); }
+      try{ await navigator.clipboard.writeText(text); toast("已复制，打开 DeepSeek 或 Claude 粘贴就行"); }
       catch(_){ err.hidden = false; err.style.color = "var(--muted)"; err.innerHTML = `复制失败，请手动复制：<textarea style="margin-top:6px" rows="6">${esc(text)}</textarea>`; }
       Log.add("speak");
       return;
@@ -1025,7 +1008,7 @@ Object.assign(Views.speak, {
   showReflexAnswer(){
     const R = Speak.reflex, it = R.items[R.i];
     $("#rf-tip").hidden = true;
-    const hasKey = !!Settings.get("apiKey");
+    const hasKey = AI.ready();
     $("#rf-res").innerHTML = `
       <div class="panel" style="margin-top:14px">
         <div class="small muted">参考回答${R.rt !== null ? `，你的反应时间 ${R.rt.toFixed(1)} 秒` : ""}</div>
@@ -1308,18 +1291,8 @@ Views.me = {
           <select id="me-neww">${[0, 10, 15, 20, 30, 50].map(n => `<option value="${n}" ${Settings.get("newWordsPerDay") === n ? "selected" : ""}>${n ? n + " 个" : "不学新词"}</option>`).join("")}</select>
           <p class="help">每天 15 个，大约一年学完 5600 个词。复习到期的内容不受这些限制；新内容从哪里来、从哪个级别开始，在「词汇与句型」页设置。</p></div>
       </div>
-      <h3>AI 口语批改</h3>
-      <div class="panel">
-        <div class="field"><label for="me-key">Anthropic API 密钥</label>
-          <input type="password" id="me-key" placeholder="sk-ant-…" autocomplete="off" value="${esc(Settings.get("apiKey"))}">
-          <p class="help">在 console.anthropic.com 注册并充值后，在「API Keys」里创建。按使用量付费，和 Claude 会员是分开的。密钥只保存在这台手机上。不填也可以：口语页会把内容复制好，你粘贴到 Claude 里批改。</p></div>
-        <div class="field"><label for="me-model">模型</label>
-          <select id="me-model">
-            <option value="claude-sonnet-5-5" ${Settings.get("model") === "claude-sonnet-5-5" ? "selected" : ""}>Claude Sonnet 5.5（推荐，质量好）</option>
-            <option value="claude-haiku-5-5" ${Settings.get("model") === "claude-haiku-5-5" ? "selected" : ""}>Claude Haiku 5.5（更快更省）</option>
-          </select></div>
-        <div class="row" style="padding-top:8px"><button class="btn sm" id="me-test">测试连接</button><span class="small muted" id="me-test-res"></span></div>
-      </div>
+      <h3>AI 批改 <span class="small muted">口语教练、语法纠错</span></h3>
+      <div class="panel" id="ai-box"></div>
       <h3>我的句子 <span class="small muted">${mine.length} 句</span></h3>
       <div class="panel">
         ${mine.length ? mine.slice().reverse().map(c => `<div class="mycard"><div class="grow"><div style="font-weight:600">${esc(c.en)}</div>${c.zh ? `<div class="small muted">${esc(c.zh)}</div>` : ""}</div><button class="icon-btn" data-del="${c.id}" aria-label="删除">${ICON.x}</button></div>`).join("") : `<p class="small muted">口语练习里改好的句子、短语，点「加入复习」就会出现在这里。</p>`}
@@ -1353,18 +1326,7 @@ Views.me = {
     $("#me-speed").oninput = e => { const v = +e.target.value; Settings.set("speed", v); $("#me-speed-v").textContent = v.toFixed(2) + "×"; };
     $("#me-new").onchange = e => { Settings.set("newPerDay", +e.target.value); Review.queue = null; };
     $("#me-neww").onchange = e => { Settings.set("newWordsPerDay", +e.target.value); Review.queue = null; };
-    $("#me-key").onchange = e => { Settings.set("apiKey", e.target.value.trim()); toast(e.target.value.trim() ? "密钥已保存" : "已清除密钥"); };
-    $("#me-model").onchange = e => Settings.set("model", e.target.value);
-    $("#me-test").onclick = async () => {
-      Settings.set("apiKey", $("#me-key").value.trim());
-      const res = $("#me-test-res");
-      if(!Settings.get("apiKey")){ res.textContent = "先填密钥"; return; }
-      res.textContent = "测试中…";
-      try{
-        const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "content-type": "application/json", "x-api-key": Settings.get("apiKey"), "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" }, body: JSON.stringify({ model: Settings.get("model"), max_tokens: 10, messages: [{ role: "user", content: "Say OK" }] }) });
-        res.innerHTML = r.ok ? `<span class="ok">连接成功</span>` : `<span class="no">失败（${r.status}）${r.status === 401 ? "：密钥不对" : ""}</span>`;
-      }catch(_){ res.innerHTML = `<span class="no">连不上，检查网络</span>`; }
-    };
+    this.renderAI();
     $$("[data-del]").forEach(b => b.onclick = () => { Cards.removeUser(b.dataset.del); this.show(); });
     $("#me-add").onclick = () => {
       const en = $("#me-add-en").value.trim(); if(!en){ $("#me-add-en").focus(); return; }
@@ -1606,6 +1568,51 @@ Views.me.renderVoices = function(){
   });
   $("#nv-clear").onclick = async () => { await Neural.clearCache(); toast("语音缓存已清除"); };
 };
+/* ================= AI 批改设置 ================= */
+Views.me.renderAI = function(){
+  const box = $("#ai-box"); if(!box) return;
+  const pv = AI.provider();
+  box.innerHTML = `
+    <div class="chips">${[["deepseek", "DeepSeek"], ["claude", "Claude"]].map(([k, n]) => `<button class="chip${pv === k ? " on" : ""}" data-aip="${k}">${n}</button>`).join("")}</div>
+    <p class="help">口语页的 AI 教练（改成地道说法、接着对话）、看中文说英文后的语法纠错，都用这里选的模型。${pv === "deepseek" ? "DeepSeek 国内能直接用、价格便宜，日常练习每天几分钱。" : "Claude 批改质量好，国内要开 VPN。"}</p>
+    ${pv === "deepseek" ? `
+      <div class="field"><label for="ai-dskey">DeepSeek API 密钥</label>
+        <input type="password" id="ai-dskey" placeholder="sk-…" autocomplete="off" value="${esc(Settings.get("dsKey"))}">
+        <p class="help">在 platform.deepseek.com 注册，充值后在「API keys」里创建。和你在电脑上给 DeepSeek Harness 用的可以是同一个密钥。密钥只保存在这台手机上。</p></div>
+      <div class="field"><label for="ai-dsmodel">模型</label>
+        <select id="ai-dsmodel">${DS_MODELS.map(([k, n]) => `<option value="${k}"${Settings.get("dsModel") === k ? " selected" : ""}>${n}</option>`).join("")}</select></div>
+      <details class="small" style="margin:4px 0 8px"><summary class="link">连不上时：填中转地址（一般不用）</summary>
+        <p style="margin:8px 0">如果网络正常、测试却一直「连不上」，可能是 DeepSeek 不让网页直接调用。可以在 Cloudflare 免费建一个中转：登录 dash.cloudflare.com →「Workers 和 Pages」→「创建」→「从 Hello World 开始」→ 部署后点「编辑代码」，把下面的代码整段替换进去，再点「部署」，把它的网址（xxx.workers.dev）填到这里。国内访问 workers.dev 可能要开 VPN。</p>
+        <textarea rows="7" readonly style="font-family:ui-monospace,monospace;font-size:11px">${esc(DS_PROXY_CODE)}</textarea>
+        <div class="field" style="padding-bottom:0"><label for="ai-dsbase">中转地址</label>
+          <input type="url" id="ai-dsbase" placeholder="https://xxx.workers.dev（不用就留空）" value="${esc(Settings.get("dsBase"))}"></div>
+      </details>` : `
+      <div class="field"><label for="ai-key">Anthropic API 密钥</label>
+        <input type="password" id="ai-key" placeholder="sk-ant-…" autocomplete="off" value="${esc(Settings.get("apiKey"))}">
+        <p class="help">在 console.anthropic.com 注册并充值后，在「API Keys」里创建。按使用量付费，和 Claude 会员是分开的。密钥只保存在这台手机上。</p></div>
+      <div class="field"><label for="ai-model">模型</label>
+        <select id="ai-model">
+          <option value="claude-sonnet-5-5" ${Settings.get("model") === "claude-sonnet-5-5" ? "selected" : ""}>Claude Sonnet 5.5（推荐，质量好）</option>
+          <option value="claude-haiku-5-5" ${Settings.get("model") === "claude-haiku-5-5" ? "selected" : ""}>Claude Haiku 5.5（更快更省）</option>
+        </select></div>`}
+    <p class="help">不填密钥也可以：口语页会把内容复制好，你粘贴到 DeepSeek 或 Claude 的聊天里批改。</p>
+    <div class="row" style="padding-top:8px"><button class="btn sm" id="ai-test">测试连接</button><span class="small muted" id="ai-test-res"></span></div>`;
+  $$("[data-aip]").forEach(b => b.onclick = () => { Settings.set("aiProvider", b.dataset.aip); this.renderAI(); });
+  const bind = (id, key, msg) => { const el = $(id); if(el) el.onchange = e => { Settings.set(key, e.target.value.trim()); if(msg) toast(e.target.value.trim() ? msg : "已清除"); }; };
+  bind("#ai-dskey", "dsKey", "密钥已保存"); bind("#ai-dsmodel", "dsModel"); bind("#ai-dsbase", "dsBase", "中转地址已保存");
+  bind("#ai-key", "apiKey", "密钥已保存"); bind("#ai-model", "model");
+  $("#ai-test").onclick = async () => {
+    ["#ai-dskey:dsKey", "#ai-key:apiKey", "#ai-dsbase:dsBase"].forEach(x => { const [id, k] = x.split(":"); const el = $(id); if(el) Settings.set(k, el.value.trim()); });
+    const res = $("#ai-test-res");
+    if(!AI.ready()){ res.textContent = "先填密钥"; return; }
+    res.textContent = "测试中…";
+    try{
+      const t = await AI.chat({ system: "Reply with a JSON object only.", user: 'Return {"ok": true} as JSON.', maxTokens: 20 });
+      res.innerHTML = t ? `<span class="ok">${AI.name()} 连接成功</span>` : `<span class="no">连上了，但没有返回内容</span>`;
+    }catch(e){ res.innerHTML = `<span class="no">${esc(e.message)}</span>`; }
+  };
+};
+
 /* ================= 发音打分设置 ================= */
 Views.me.renderPron = function(){
   const box = $("#pron-box"); if(!box) return;
