@@ -10,10 +10,11 @@ const STT_MODELS = {
   tiny: { id: "Xenova/whisper-tiny.en", mb: 41, name: "快速", desc: "约 41MB，识别快，适合跟读打分" },
   base: { id: "Xenova/whisper-base.en", mb: 77, name: "更准", desc: "约 77MB，口音重时更准，识别慢一点" }
 };
+/* 要用打包了 onnxruntime 的完整版（transformers.min.js）；transformers.web.js 需要另外引入 onnxruntime，直接 import 会失败 */
 const TRANSFORMERS_URLS = [
-  "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.web.min.js",
-  "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.web.js",
-  "https://unpkg.com/@huggingface/transformers@3.8.1/dist/transformers.web.min.js"
+  "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js",
+  "https://unpkg.com/@huggingface/transformers@3.8.1/dist/transformers.min.js",
+  "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.js"
 ];
 
 /* ---------- 麦克风 ---------- */
@@ -184,7 +185,7 @@ let asr = null;
 async function load(model){
   let mod = null, lastErr = null;
   let from = "";
-  for(const u of URLS){ try{ mod = await import(u); from = u; break; }catch(e){ lastErr = e; } }
+  for(const u of URLS){ try{ const m = await import(u); if(!m.pipeline) throw new Error("没有 pipeline"); mod = m; from = u; break; }catch(e){ lastErr = e; } }
   if(!mod) throw new Error("无法加载识别程序：" + (lastErr && lastErr.message || lastErr));
   mod.env.allowLocalModels = false;
   // 运行库文件跟识别程序从同一个地方下载
