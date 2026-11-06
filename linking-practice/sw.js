@@ -1,5 +1,5 @@
-const CACHE = "daily-english-v9";
-const FILES = ["./", "index.html", "styles.css?v=9", "data.js?v=9", "words.js?v=9", "vocab.js?v=9", "linking.js?v=9", "core.js?v=9", "app.js?v=9", "manifest.json", "icon-192.png", "icon-512.png", "icon-180.png"];
+const CACHE = "daily-english-v10";
+const FILES = ["./", "index.html", "styles.css?v=10", "data.js?v=10", "words.js?v=10", "vocab.js?v=10", "linking.js?v=10", "core.js?v=10", "replies_zh.js?v=10", "neural.js?v=10", "app.js?v=10", "manifest.json", "icon-192.png", "icon-512.png", "icon-180.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).catch(() => {})); self.skipWaiting(); });
 self.addEventListener("activate", e => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))));

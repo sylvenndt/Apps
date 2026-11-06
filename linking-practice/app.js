@@ -143,6 +143,8 @@ Views.review = {
     Review.revealed = false; Review.said = null;
     const type = reviewType(id);
     const isNew = !SRS.all()[id];
+    Speech.scene = card.scene;
+    { const nx = Cards.get(Review.queue[Review.idx + 1]); if(nx) Neural.prefetch(nx.en, nx.scene); }
     const sc = SCENE_BY_KEY[card.scene];
     const front = type === "listen" ? `
         <button class="play" id="rv-play" style="--c:var(--blue)" aria-label="播放">${ICON.play}</button>
@@ -305,7 +307,7 @@ Views.library = {
       Settings.set("focus", f); Review.queue = null; const y = window.scrollY; this.show(); window.scrollTo(0, y);
       toast(f.includes(k) ? "已设为重点场景" : "已取消重点");
     });
-    $$("#v-library [data-p]").forEach(b => b.onclick = () => playWith(b, Cards.get(b.dataset.p).en));
+    $$("#v-library [data-p]").forEach(b => b.onclick = () => { const c = Cards.get(b.dataset.p); Speech.scene = c.scene; playWith(b, c.en); });
     $$("#v-library [data-add]").forEach(b => b.onclick = () => { SRS.schedule(b.dataset.add, Date.now()); Review.queue = null; b.outerHTML = `<span class="small muted">复习中</span>`; toast("已加入今天的复习"); });
     $$("#v-library [data-addall]").forEach(b => b.onclick = () => {
       const k = b.dataset.addall; ALL_ITEMS.filter(x => x.scene === k).forEach(x => { if(!SRS.all()[x.id]) SRS.schedule(x.id, Date.now()); });
@@ -423,8 +425,10 @@ Views.listen = {
       let r = Math.random() * types.reduce((a, t) => a + t[1], 0), type = types[0][0];
       for(const [t, w] of types){ if((r -= w) <= 0){ type = t; break; } }
       if(type === "reply"){
-        const others = shuffle(ALL_ITEMS.filter(x => x.scene !== it.scene)).slice(0, 3).map(x => x.reply);
-        return { it, type, opts: shuffle([it.reply, ...others]), ans: it.reply };
+        const seen = new Set([it.reply]);
+        const others = shuffle(ALL_ITEMS.filter(x => x.scene !== it.scene)).filter(x => !seen.has(x.reply) && seen.add(x.reply)).slice(0, 3);
+        const src = Object.fromEntries(others.map(x => [x.reply, x]));
+        return { it, type, opts: shuffle([it.reply, ...others.map(x => x.reply)]), ans: it.reply, src };
       }
       if(type === "detail") return { it, type, opts: shuffle([it.en, ...dv]), ans: it.en };
       if(type === "word"){
@@ -439,8 +443,10 @@ Views.listen = {
         const me = ALL_WORDS.find(x => x.w === it.word);
         let pool2 = ALL_WORDS.filter(x => x.w !== it.word && x.cat === me.cat && x.l === me.l && !x.hand);
         const short = z => z.replace(/^[a-z]+\.\s*/, "").split("；")[0];
-        const opts = [short(it.meaning), ...shuffle(pool2).slice(0, 3).map(x => short(x.zh))];
-        return { it, type, opts: shuffle(opts), ans: opts[0] };
+        const picks = shuffle(pool2).filter(x => short(x.zh) !== short(it.meaning)).slice(0, 3);
+        const opts = [short(it.meaning), ...picks.map(x => short(x.zh))];
+        const src = Object.fromEntries(picks.map(x => [short(x.zh), x]));
+        return { it, type, opts: shuffle(opts), ans: opts[0], src };
       }
       if(type === "order") return { it, type, opts: shuffle(it.chunks), ans: it.chunks.join(" ") };
       if(type === "pattern"){
@@ -458,6 +464,8 @@ Views.listen = {
     const q = Listen.qs[Listen.i];
     if(!q){ this.finish(); return; }
     Listen.answered = false; Listen.t0 = 0;
+    Speech.scene = q.it.scene;
+    { const nq = Listen.qs[Listen.i + 1]; if(nq) Neural.prefetch(nq.it.en, nq.it.scene); if(q.it.reply) Neural.prefetch(q.it.reply, q.it.scene, true); }
     clearInterval(Listen.timer);
     const prompt = { reply: "对方这样说，你会怎么回？", detail: "你听到的是哪一句？注意小词", scene: "这句话最可能在哪里听到？", word: q.it.single ? "你听到的是哪个词？" : "这句话里用到了哪个词？", pattern: "这句话用的是哪个句型？", meaning: "听到的这个词是什么意思？", order: "按听到的顺序点意群" }[q.type];
     $("#v-listen").innerHTML = `
@@ -518,31 +526,72 @@ Views.listen = {
     if(!ok) SRS.schedule(q.it.id, Date.now());
     $$("#ls-opts .opt").forEach((b, j) => { b.disabled = true; if(q.opts[j] === q.ans) b.classList.add("ok"); else if(j === k) b.classList.add("no"); });
     const head = k < 0 ? `<b class="no">超时了</b>，听到就要马上反应` : isOrder && !ok ? `<b class="no">顺序不对</b>，再听一遍，注意意群之间是怎么连起来的` : ok ? `<b class="ok">对</b>${Listen.t0 ? `，用时 ${rt.toFixed(1)} 秒` : ""}` : `<b class="no">不对</b>，这句已加入复习`;
-    let diff = "";
-    if(q.type === "detail" && k >= 0 && !ok){
-      const a = q.ans.split(" "), b = q.opts[k].split(" "); const i = a.findIndex((w, j) => w !== b[j]);
-      if(i >= 0) diff = `<p class="small" style="margin-top:6px">原句是 <b class="ok">${esc(a[i])}</b>，你选的是 <b class="no">${esc(b[i])}</b>。连读时这种小词最容易被吞掉，多听几遍慢速。</p>`;
-    }
+    const picked = k >= 0 && !isOrder ? q.opts[k] : null;
+    const fb = this.explain(q, picked, ok, isOrder);
     $("#ls-fb").innerHTML = `
-      <p>${head}</p>${diff}
-      <div class="panel" style="margin-top:10px">
-        <div class="en" style="font-size:20px">${renderEn(q.it.chunks)}</div>
-        <p class="zh blur" id="ls-zh" style="margin-top:4px">${esc(q.it.zh)}</p>
-        ${q.type !== "reply" && q.it.reply ? `<p class="small muted" style="margin-top:8px">对方可能回：<b style="color:var(--ink)">${esc(q.it.reply)}</b></p>` : ""}
-        ${q.it.note ? `<p class="note">${esc(q.it.note)}</p>` : ""}
-        <div class="row" style="margin-top:12px;gap:8px">
+      <p>${head}</p>
+      <div class="panel fbx" style="margin-top:10px">
+        <div class="fb-row"><span class="fb-k">原句</span><div class="grow"><div class="en" style="font-size:19px">${renderEn(q.it.chunks)}</div>${fb.srcZh ? `<div class="zh-line">${esc(fb.srcZh)}</div>` : ""}</div></div>
+        <div class="fb-row"><span class="fb-k ok">答案</span><div class="grow"><b>${esc(fb.ans)}</b>${fb.ansZh ? `<div class="zh-line">${esc(fb.ansZh)}</div>` : ""}</div></div>
+        ${fb.picked ? `<div class="fb-row"><span class="fb-k no">你选的</span><div class="grow"><b>${esc(fb.picked)}</b>${fb.pickedZh ? `<div class="zh-line">${fb.pickedZh}</div>` : ""}</div></div>` : ""}
+        <div class="fb-row"><span class="fb-k">解析</span><div class="grow small">${fb.why}</div></div>
+        ${fb.links ? `<div class="fb-row"><span class="fb-k">连读</span><div class="grow small">${fb.links}</div></div>` : ""}
+        <div class="row wrap" style="margin-top:12px;gap:8px">
           <button class="chip" id="ls-again">再听</button><button class="chip" id="ls-slow">慢速</button>
+          ${q.it.reply ? `<button class="chip" id="ls-reply">听回应</button>` : ""}
           <button class="chip" id="ls-save">加入复习</button>
         </div>
       </div>
       <button class="btn block" style="margin-top:14px;padding:14px" id="ls-next">${Listen.i + 1 < Listen.qs.length ? "下一题" : "看结果"}</button>`;
+    const rp = $("#ls-reply"); if(rp) rp.onclick = () => playWith($("#ls-play"), q.it.reply, null, true);
     const play = $("#ls-play");
-    $("#ls-zh").onclick = e => e.currentTarget.classList.toggle("show");
     $("#ls-again").onclick = () => playWith(play, q.it.en);
     $("#ls-slow").onclick = () => playWith(play, q.it.en, Math.max(0.5, Settings.get("speed") - 0.3));
     $("#ls-save").onclick = e => { SRS.schedule(q.it.id, Date.now()); Review.queue = null; e.currentTarget.textContent = "已加入"; e.currentTarget.disabled = true; };
     if(!ok){ const s = $("#ls-save"); s.textContent = "已加入"; s.disabled = true; Review.queue = null; }
     $("#ls-next").onclick = () => { Speech.stop(); Listen.i++; this.renderQ(); };
+  },
+  /* 讲解：原句意思、正确答案、你选的为什么不对 */
+  explain(q, picked, ok, isOrder){
+    const it = q.it, sc = SCENE_BY_KEY[it.scene];
+    const srcZh = it.single ? "" : (it.scene === "vocab" ? "" : it.zh);
+    const toks = tokenize(it.en), lk = detectLinks(toks).slice(0, 3);
+    const links = lk.length ? lk.map(l => `<b>${esc(l.a)}‿${esc(l.b)}</b> 读作 ${esc(l.hint)}`).join("；") : "";
+    const r = { srcZh, links, ans: q.ans, ansZh: "", picked: ok ? null : picked, pickedZh: "", why: "" };
+    if(q.type === "reply"){
+      r.ansZh = REPLY_ZH[q.ans] || "";
+      r.why = `对方说「${esc(it.zh)}」，最自然的接话是「${esc(r.ansZh || q.ans)}」。`;
+      if(r.picked){ const o = q.src && q.src[r.picked]; r.pickedZh = `${esc(REPLY_ZH[r.picked] || "")}${o ? `<br><span class="muted">这句一般用来回应：${esc(o.en)}（${esc(o.zh)}）</span>` : ""}`; }
+    } else if(q.type === "detail"){
+      r.ansZh = it.zh;
+      const a = q.ans.split(" ");
+      if(r.picked){ const b = r.picked.split(" "); const i = a.findIndex((w, j) => w !== b[j]); if(i >= 0){ r.pickedZh = `差别在 <b class="no">${esc(b[i])}</b>，原句是 <b class="ok">${esc(a[i])}</b>`; } }
+      r.why = "这类题只差一个小词。连读时 can / can't、do / did、a / the 这些词会被弱读、吞掉，要靠前后的意思和重音来判断。听不出来就用慢速多听几遍。";
+    } else if(q.type === "scene"){
+      r.ansZh = sc ? sc.name : "";
+      r.why = `这句话的意思是「${esc(it.zh)}」，一般出现在「${esc(sc ? sc.name : "")}」的场合。`;
+      if(r.picked){ const ps = SCENES.find(x => x.en === r.picked); r.pickedZh = ps ? esc(ps.name) : ""; }
+    } else if(q.type === "word"){
+      const w = ALL_WORDS.find(x => x.w === q.ans);
+      r.ansZh = w ? `${w.pos}，${w.zh.replace(/^[a-z]+\.\s*/, "")}` : "";
+      r.why = it.single ? "先听清整个单词的音节和重音，再想意思。拼写相近的词，区别往往在重音和中间的元音。" : `这句话里用到了 <b>${esc(q.ans)}</b>。${esc(it.note || "")}`;
+      if(r.picked){ const p = ALL_WORDS.find(x => x.w === r.picked); r.pickedZh = p ? esc(`${p.pos}，${p.zh.replace(/^[a-z]+\.\s*/, "")}`) : ""; }
+    } else if(q.type === "meaning"){
+      r.ansZh = `${it.word}（${it.posZh || ""}）`;
+      r.why = esc(it.note || "");
+      if(r.picked){ const p = q.src && q.src[r.picked]; r.pickedZh = p ? `这是 <b>${esc(p.w)}</b> 的意思` : ""; }
+    } else if(q.type === "pattern"){
+      const pt = [...PATTERNS, ...STRUCTURES].find(x => x.p === q.ans);
+      r.ansZh = pt ? pt.zh : "";
+      r.why = `这句话用了「${esc(q.ans)}」：${esc(pt ? pt.zh : "")}。`;
+      if(r.picked){ const pp = [...PATTERNS, ...STRUCTURES].find(x => x.p === r.picked); r.pickedZh = pp ? esc(pp.zh) : ""; }
+    } else if(q.type === "order"){
+      r.ans = it.chunks.join(" / ");
+      r.ansZh = it.zh;
+      r.why = `这句分成 ${it.chunks.length} 个意群。美国人说话是一个意群一口气说完的，意群内部的词会连在一起，意群之间才会有很短的停顿。`;
+    }
+    if(it.reply && q.type !== "reply") r.why += `<br><span class="muted">对方可能回：${esc(it.reply)}（${esc(REPLY_ZH[it.reply] || "")}）</span>`;
+    return r;
   },
   finish(){
     Listen.state = "done";
@@ -586,6 +635,7 @@ Views.listen = {
   },
   renderHF(){
     const h = Listen.hf, it = h.list[h.i];
+    if(it){ Speech.scene = it.scene; const nx = h.list[(h.i + 1) % h.list.length]; Neural.prefetch(it.reply, it.scene, true); if(nx) Neural.prefetch(nx.en, nx.scene); }
     if(!it){ this.renderSetup(); return; }
     $("#v-listen").innerHTML = `
       <div class="row between">
@@ -702,6 +752,7 @@ function coachPrompt(said){
 Views.speak = {
   renderSession(){
     const t = currentTopic();
+    Speech.scene = t.scene || "talk";
     const hasKey = !!Settings.get("apiKey");
     $("#v-speak").innerHTML = `
       <div class="row" style="margin-bottom:14px"><button class="icon-btn" id="sp-back" aria-label="返回话题">${ICON.back}</button>${bulletHTML(t.scene)}<h2 style="margin:0">${esc(t.title)}</h2></div>
@@ -749,7 +800,7 @@ Views.speak = {
           </div>
         </div>`;
     }).join("");
-    $$("[data-play]", th).forEach(b => b.onclick = () => { const x = Speak.turns[+b.dataset.play]; playWith(b, x.who === "me" ? x.r.natural : x.text); });
+    $$("[data-play]", th).forEach(b => b.onclick = () => { const x = Speak.turns[+b.dataset.play]; playWith(b, x.who === "me" ? x.r.natural : x.text, null, x.who !== "me"); });
     $$("[data-play-casual]", th).forEach(b => b.onclick = () => playWith(b, Speak.turns[+b.dataset.playCasual].r.casual));
     $$("[data-blur]", th).forEach(b => b.onclick = () => b.classList.toggle("show"));
     $$("[data-save]", th).forEach(b => b.onclick = () => {
@@ -798,7 +849,7 @@ Views.speak = {
       this.renderThread();
       const bubs = $$("#sp-thread .bub"); bubs[bubs.length - 1].scrollIntoView({ behavior: "smooth", block: "center" });
       await playWith($(`[data-play="${Speak.turns.length - (r.reply ? 2 : 1)}"]`), r.natural);
-      if(r.reply && location.hash === "#speak"){ await sleep(400); await playWith($(`[data-play="${Speak.turns.length - 1}"]`), r.reply); }
+      if(r.reply && location.hash === "#speak"){ await sleep(400); await playWith($(`[data-play="${Speak.turns.length - 1}"]`), r.reply, null, true); }
     }catch(e){
       Speak.turns.pop(); this.renderThread();
       input.value = said; err.hidden = false; err.style.color = ""; err.textContent = e.message;
@@ -888,6 +939,7 @@ Object.assign(Views.speak, {
       return;
     }
     R.said = ""; R.rt = null; R.phase = "listen";
+    Speech.scene = it.scene; Neural.prefetch(it.reply, it.scene); { const nx = R.items[R.i + 1]; if(nx) Neural.prefetch(nx.en, nx.scene, true); }
     const sc = SCENE_BY_KEY[it.scene];
     $("#v-speak").innerHTML = `
       <div class="row between">
@@ -1010,6 +1062,7 @@ Views.link = {
     $("#lk-rand").onclick = () => { Link.text = shuffle(ALL_ITEMS)[0].en; $("#lk-input").value = Link.text; $$("#lk-presets .chip").forEach(c => c.classList.remove("on")); this.renderSentence(); };
     $$("#lk-presets .chip[data-i]").forEach(b => b.onclick = () => { Link.text = LINK_PRESETS[+b.dataset.i]; $("#lk-input").value = Link.text; $$("#lk-presets .chip").forEach(c => c.classList.toggle("on", c === b)); this.renderSentence(); });
     $("#lk-speed").oninput = e => { const v = +e.target.value; Settings.set("speed", v); $("#lk-speed-v").textContent = v.toFixed(2) + "×"; const a = $("#lk-audio"); if(a.src) a.playbackRate = v; };
+    Speech.scene = "link";
     $("#lk-model").onclick = () => Speech.say(Link.text);
     $("#lk-both").onclick = async () => { await Speech.say(Link.text); await sleep(350); this.playMine(); };
     $("#lk-mine").onclick = () => this.playMine();
@@ -1159,9 +1212,11 @@ Views.me = {
       <h1>我的</h1>
       <h3>声音检查</h3>
       <div class="panel" id="me-diag"></div>
+      <h3>发音人</h3>
+      <div class="panel" id="nv-box"></div>
       <h3>朗读</h3>
       <div class="panel">
-        <div class="field"><label for="me-voice">美音发音人</label>
+        <div class="field"><label for="me-voice">手机系统语音</label>
           <div class="row"><select id="me-voice"></select><button class="icon-btn" id="me-try" aria-label="试听">${ICON.play}</button></div>
           <details class="help"><summary class="link">想要更自然的美音？</summary>
             <p style="margin-top:6px"><b>iPhone</b>：设置 › 辅助功能 › 朗读内容 › 声音 › 英语 › 英语（美国），下载带「优化音质」或 Premium 的声音（比如 Ava、Zoe、Evan），回来刷新就能选。</p>
@@ -1214,6 +1269,7 @@ Views.me = {
       const cur = Speech.voice(); if(cur) sel.value = cur.name;
     };
     fill(); Views.me.fillVoices = fill;
+    this.renderVoices();
     this.renderDiag();
     sel.onchange = () => { Settings.set("voice", sel.value); Speech.say("Hey! This is how I sound."); };
     $("#me-try").onclick = () => Speech.say("Hey! This is how I sound.");
@@ -1363,8 +1419,8 @@ Views.words = {
       Settings.set("mix", m); Review.queue = null;
     }));
     $$("[data-start]").forEach(b => b.onclick = keep(() => { Settings.set("startLevel", b.dataset.start); Review.queue = null; }));
-    $$("[data-wp]").forEach(b => b.onclick = async () => { const c = EXTRA_CARDS[b.dataset.wp]; b.classList.add("speaking"); if(await Speech.say(c.word, 0.8) && !c.single){ await sleep(350); await Speech.say(c.en); } b.classList.remove("speaking"); });
-    $$("[data-pp]").forEach(b => b.onclick = () => playWith(b, EXTRA_CARDS[b.dataset.pp].en));
+    $$("[data-wp]").forEach(b => b.onclick = async () => { const c = EXTRA_CARDS[b.dataset.wp]; Speech.scene = "vocab"; b.classList.add("speaking"); if(await Speech.say(c.word, 0.8) && !c.single){ await sleep(350); await Speech.say(c.en); } b.classList.remove("speaking"); });
+    $$("[data-pp]").forEach(b => b.onclick = () => { const c = EXTRA_CARDS[b.dataset.pp]; Speech.scene = c.scene; playWith(b, c.en); });
     $$("[data-wadd]").forEach(b => b.onclick = () => { SRS.schedule(b.dataset.wadd, Date.now()); Review.queue = null; b.outerHTML = `<span class="small muted">复习中</span>`; });
     const addAll = $("#wd-addall");
     if(addAll) addAll.onclick = keep(() => {
@@ -1376,6 +1432,65 @@ Views.words = {
     $$("[data-pspeak]").forEach(b => b.onclick = () => practicePattern([...PATTERNS, ...STRUCTURES].find(x => x.id === b.dataset.pspeak)));
   }
 };
+
+/* ================= AI 发音人 ================= */
+document.addEventListener("fluent-neural", () => { if(location.hash === "#me") Views.me.renderVoices(); });
+Views.me.renderVoices = function(){
+  const box = $("#nv-box"); if(!box) return;
+  const eng = Settings.get("engine"), st = Neural.state, cast = Settings.get("cast"), acc = Settings.get("accent");
+  const v1 = Settings.get("voice1"), v2 = Settings.get("voice2");
+  const status = st === "ready" ? `<span class="ok">AI 语音已就绪</span>，离线也能用`
+    : st === "loading" ? `正在${store.get("neuralReady") ? "启动" : "下载"} AI 语音模型… <b>${Math.round(Neural.progress * 100)}%</b><div class="bar2"><i style="width:${Math.round(Neural.progress * 100)}%"></i></div>`
+    : st === "error" ? `<span class="no">AI 语音加载失败</span>：${esc(Neural.error)}<br><span class="small muted">国内网络请先打开 VPN 再重试。</span>`
+    : store.get("neuralReady") ? "AI 语音已下载，选上面的「AI 真人语音」就会启动。" : "第一次使用需要下载约 90MB 的语音模型（只下载一次，建议连 Wi-Fi），之后不联网也能用。";
+  box.innerHTML = `
+    <div class="seg" id="nv-eng" style="grid-template-columns:1fr 1fr">
+      <button class="${eng === "neural" ? "on" : ""}" data-eng="neural">AI 真人语音</button>
+      <button class="${eng === "system" ? "on" : ""}" data-eng="system">手机系统语音</button>
+    </div>
+    <p class="small" style="margin-top:10px">${status}</p>
+    ${eng === "neural" && st !== "ready" && st !== "loading" ? `<button class="btn line sm" style="--c:var(--blue);margin-top:8px" id="nv-load">${store.get("neuralReady") ? "启动 AI 语音" : st === "error" ? "重新下载" : "下载 AI 语音（约 90MB）"}</button>` : ""}
+    <p class="small muted" style="margin-top:8px">AI 语音由开源模型 Kokoro 在你手机上生成，有 18 个美音、英音的男女声，比系统语音自然很多。还没准备好的时候，会自动先用手机系统语音。</p>
+    <div class="field" style="margin-top:8px"><label>怎么分配声音</label>
+      <div class="chips" style="flex-wrap:wrap">
+        ${[["scene", "按场景分配角色"], ["random", "每句换一个人"], ["fixed", "固定用我选的"]].map(([k, n]) => `<button class="chip${cast === k ? " on" : ""}" data-cast="${k}">${n}</button>`).join("")}
+      </div>
+      <p class="help">${cast === "scene" ? "比如咖啡店是活泼的店员，机场是英国空乘，约会是轻声细语的女生；对话里的回应会换另一个人说。" : cast === "random" ? "每句话随机换一个口音和性别，最能锻炼听不同的人说话。" : "所有句子都用下面选的「主讲」，回应用「对话」那个人。"}</p>
+    </div>
+    <div class="field"><label>口音</label>
+      <div class="chips">${[["both", "美音英音都要"], ["us", "只要美音"], ["gb", "只要英音"]].map(([k, n]) => `<button class="chip${acc === k ? " on" : ""}" data-acc="${k}">${n}</button>`).join("")}</div>
+    </div>
+    <div class="field"><label>声音列表 <span class="small muted">点 ▶ 试听</span></label>
+      ${KOKORO_VOICES.map(v => `
+        <div class="vrow${acc !== "both" && v.accent !== acc ? " dim" : ""}">
+          <button class="play sm" data-vtry="${v.id}" style="--c:${v.gender === "f" ? "var(--pink)" : "var(--blue)"}" aria-label="试听 ${esc(v.name)}">${ICON.play}</button>
+          <div class="grow"><div><b>${esc(v.name)}</b> <span class="tagv">${v.accent === "us" ? "美音" : "英音"}${v.gender === "f" ? "女" : "男"}</span></div><div class="small muted">${esc(v.desc)}</div></div>
+          <div class="vpick">
+            <button class="chip${v1 === v.id ? " on" : ""}" data-v1="${v.id}">主讲</button>
+            <button class="chip${v2 === v.id ? " on" : ""}" data-v2="${v.id}">对话</button>
+          </div>
+        </div>`).join("")}
+    </div>
+    <div class="row" style="gap:8px;margin-top:6px"><button class="link" id="nv-clear">清除已生成的语音缓存</button></div>
+    <p class="small muted" style="margin-top:8px">Kokoro-82M（Apache-2.0 开源协议）。</p>`;
+  const keep = fn => () => { const y = window.scrollY; fn(); this.renderVoices(); window.scrollTo(0, y); };
+  $$("#nv-eng button").forEach(b => b.onclick = keep(() => { Settings.set("engine", b.dataset.eng); if(b.dataset.eng === "neural" && store.get("neuralReady")) Neural.load(); }));
+  const ld = $("#nv-load"); if(ld) ld.onclick = keep(() => { Neural.worker = null; Neural.state = "off"; Neural.load(); });
+  $$("[data-cast]").forEach(b => b.onclick = keep(() => Settings.set("cast", b.dataset.cast)));
+  $$("[data-acc]").forEach(b => b.onclick = keep(() => Settings.set("accent", b.dataset.acc)));
+  $$("[data-v1]").forEach(b => b.onclick = keep(() => { Settings.set("voice1", b.dataset.v1); if(Settings.get("cast") !== "fixed") Settings.set("cast", "fixed"); }));
+  $$("[data-v2]").forEach(b => b.onclick = keep(() => { Settings.set("voice2", b.dataset.v2); if(Settings.get("cast") !== "fixed") Settings.set("cast", "fixed"); }));
+  $$("[data-vtry]").forEach(b => b.onclick = async () => {
+    const v = KV[b.dataset.vtry];
+    const text = `Hi, I'm ${v.name}. Nice to meet you! Want to grab a coffee sometime?`;
+    if(Neural.state !== "ready"){ toast(Neural.state === "loading" ? "AI 语音还在准备，稍等一下" : "先下载 AI 语音，才能试听这些声音"); return; }
+    b.classList.add("speaking");
+    try{ const my = ++Speech.token; const blob = await Neural.audio(text, v.id, true); if(my === Speech.token) await Neural.play(blob, 1); }catch(e){ toast("试听失败：" + e.message); }
+    b.classList.remove("speaking");
+  });
+  $("#nv-clear").onclick = async () => { await Neural.clearCache(); toast("语音缓存已清除"); };
+};
+if(Settings.get("engine") === "neural" && store.get("neuralReady")) setTimeout(() => Neural.load(), 800);
 
 /* ================= 声音检查 ================= */
 let lastSoundProblem = null;

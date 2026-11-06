@@ -13,7 +13,7 @@ const store = {
 };
 
 const Settings = {
-  defaults: { speed: 0.9, voice: "", reactSec: 8, apiKey: "", model: "claude-sonnet-5-5", keepAudio: true, reviewMode: "listen", focus: [], newPerDay: 10, newWordsPerDay: 15, mix: { scenes: true, vocab: true, pattern: true }, startLevel: "B1" },
+  defaults: { speed: 0.9, voice: "", reactSec: 8, engine: "system", cast: "scene", accent: "both", voice1: "af_heart", voice2: "am_michael", apiKey: "", model: "claude-sonnet-5-5", keepAudio: true, reviewMode: "listen", focus: [], newPerDay: 10, newWordsPerDay: 15, mix: { scenes: true, vocab: true, pattern: true }, startLevel: "B1" },
   get(k){ const s = store.get("settings", {}); return k in s ? s[k] : this.defaults[k]; },
   set(k, v){ const s = store.get("settings", {}); s[k] = v; store.set("settings", s); }
 };
@@ -169,7 +169,7 @@ const IS_ANDROID = /Android/i.test(navigator.userAgent);
 const IS_IOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const IN_APP_BROWSER = /MicroMessenger|QQ\/|Weibo|DingTalk|Lark|FBAN|FBAV|Instagram|Line\//i.test(navigator.userAgent);
 const Speech = {
-  voices: [], all: [], token: 0, unlocked: false, loaded: false,
+  voices: [], all: [], token: 0, unlocked: false, loaded: false, scene: null,
   stats: { started: 0, failed: 0, lastError: "" }, warned: false,
   score(v){
     let s = 0;
@@ -215,6 +215,14 @@ const Speech = {
     return [...list, null];
   },
   say(text, rate, alt){
+    // AI 真人语音可用时优先用它，出错再退回系统语音
+    const t = String(text || "").trim();
+    if(t && typeof Neural !== "undefined" && Neural.active()){
+      const my = ++this.token;
+      try{ if(TTS_OK) speechSynthesis.cancel(); }catch(_){}
+      return Neural.say(t, rate || Settings.get("speed"), alt, my).catch(() => my === this.token ? this._say(t, rate, alt, 0) : false);
+    }
+    if(typeof Neural !== "undefined") Neural.stopPlayback();
     return this._say(text, rate, alt, 0);
   },
   _say(text, rate, alt, attempt){
@@ -275,7 +283,7 @@ const Speech = {
       }catch(e){ this.fail(e.message || "error"); finish(); }
     });
   },
-  stop(){ this.token++; try{ if(TTS_OK) speechSynthesis.cancel(); }catch(_){} },
+  stop(){ this.token++; try{ if(TTS_OK) speechSynthesis.cancel(); }catch(_){} if(typeof Neural !== "undefined") Neural.stopPlayback(); },
   async chunks(list, rate){
     const my = this.token + 1;
     for(let i = 0; i < list.length; i++){
@@ -291,8 +299,8 @@ if(TTS_OK){
   try{ speechSynthesis.addEventListener ? speechSynthesis.addEventListener("voiceschanged", () => Speech.load()) : (speechSynthesis.onvoiceschanged = () => Speech.load()); }catch(_){ speechSynthesis.onvoiceschanged = () => Speech.load(); }
   // 有的安卓不会触发 voiceschanged，过一会儿再读一次
   [300, 1000, 2500].forEach(t => setTimeout(() => { if(!Speech.voices.length) Speech.load(); }, t));
-  ["pointerdown", "touchend", "click", "keydown"].forEach(ev => document.addEventListener(ev, () => Speech.unlock(), { once: true, capture: true }));
 }
+["pointerdown", "touchend", "click", "keydown"].forEach(ev => document.addEventListener(ev, () => { Speech.unlock(); if(typeof Neural !== "undefined") Neural.unlock(); }, { once: true, capture: true }));
 
 /* ---------- 语音识别 ---------- */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;

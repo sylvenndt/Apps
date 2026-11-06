@@ -273,3 +273,18 @@ canvas.wave{width:100%;height:92px;display:block;border-radius:12px;background:v
 .banner b{color:var(--red);margin-left:6px}
 ol.fix{margin:12px 0 0;padding-left:20px;font-size:14px;line-height:1.6}
 ol.fix li{margin:6px 0}
+
+/* v9 */
+.fbx .fb-row{display:flex;gap:12px;padding:10px 0;border-top:1px solid var(--rule)}
+.fbx .fb-row:first-child{border-top:0;padding-top:0}
+.fbx .fb-k{flex:0 0 44px;font-size:12px;font-weight:700;color:var(--muted);padding-top:3px}
+.fbx .fb-k.ok{color:var(--ok)} .fbx .fb-k.no{color:var(--bad)}
+.zh-line{font-size:14px;color:var(--muted);margin-top:3px}
+
+.bar2{height:6px;border-radius:3px;background:var(--rule);overflow:hidden;margin-top:6px}
+.bar2 i{display:block;height:100%;background:var(--blue);transition:width .3s}
+.vrow{display:flex;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--rule)}
+.vrow.dim{opacity:.35}
+.vrow .tagv{font-size:11px;font-weight:700;color:var(--muted);border:1px solid var(--rule);border-radius:6px;padding:0 5px;margin-left:4px}
+.vpick{display:flex;flex-direction:column;gap:4px}
+.vpick .chip{padding:3px 9px;font-size:12px}
