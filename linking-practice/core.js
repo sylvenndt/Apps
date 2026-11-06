@@ -205,8 +205,20 @@ const Speech = {
     if(!this.warned){ this.warned = true; document.dispatchEvent(new Event("fluent-ttsfail")); if(typeof toast === "function") toast("没有声音？去「我的」→「声音检查」看看原因"); }
   },
   /* 朗读必须同步发出（不能放进定时器），否则会被浏览器当成“非用户操作”拦截 */
+  /* 引擎报错时依次换别的发音人再试，最后不指定发音人；成功的发音人会被记住 */
+  candidates(alt){
+    const pref = this.voice();
+    let list = [...this.voices];
+    const good = Settings.get("goodVoice");
+    list.sort((a, b) => (b.name === good) - (a.name === good) || (b === pref) - (a === pref) || (b.localService === true) - (a.localService === true));
+    if(alt && list.length > 1) list = [list[1], list[0], ...list.slice(2)];
+    return [...list, null];
+  },
   say(text, rate, alt){
-    const my = ++this.token;
+    return this._say(text, rate, alt, 0);
+  },
+  _say(text, rate, alt, attempt){
+    const my = attempt ? this.token : ++this.token;
     rate = rate || Settings.get("speed");
     text = String(text || "").trim();
     const words = text.split(/\s+/).length;
@@ -223,20 +235,35 @@ const Speech = {
         if(synth.paused) synth.resume();
         const u = new SpeechSynthesisUtterance(text);
         u.lang = "en-US";
-        let v = this.voice();
-        if(alt && this.voices.length > 1){ const others = this.voices.filter(x => x !== v && this.score(x) > -50); if(others.length) v = others[0]; }
+        const cands = this.candidates(alt);
+        const v = cands[Math.min(attempt, cands.length - 1)];
         if(v){ u.voice = v; u.lang = String(v.lang || "en-US").replace("_", "-"); }
         u.rate = rate; u.volume = 1;
-        u.onstart = () => { started = true; this.stats.started++; this.stats.lastError = ""; };
+        u.onstart = () => { started = true; this.stats.started++; this.stats.lastError = ""; if(attempt) Settings.set("goodVoice", v ? v.name : ""); };
         u.onend = () => {
           // 有的手机没有英文语音时会“瞬间结束”而不出声
           if(!started && Date.now() - t0 < 250 && words > 1 && my === this.token) this.fail("instant-end");
           finish();
         };
+        let retried = false;
         u.onerror = e => {
           const er = e && e.error;
+          // 有的手机指定发音人会出错，换成只指定语言、让系统自己选再试一次
+          if(!retried && !started && (er === "synthesis-failed" || er === "voice-unavailable" || er === "language-unavailable") && my === this.token){
+            retried = true;
+            try{
+              const u2 = new SpeechSynthesisUtterance(text); u2.lang = "en-US"; u2.rate = rate;
+              u2.onstart = u.onstart; u2.onend = u.onend;
+              u2.onerror = e2 => { const r2 = e2 && e2.error; if(r2 && r2 !== "interrupted" && r2 !== "canceled" && my === this.token) this.fail(r2); finish(); };
+              this._keep = u2; synth.cancel(); synth.speak(u2); return;
+            }catch(_){}
+          }
           if(er === "not-allowed"){ this.stats.lastError = er; if(typeof toast === "function" && my === this.token) toast("点一下播放按钮就能听到"); }
-          else if(er && er !== "interrupted" && er !== "canceled" && my === this.token) this.fail(er);
+          else if(er && er !== "interrupted" && er !== "canceled" && my === this.token){
+            const n = this.candidates(alt).length;
+            if(!started && attempt + 1 < n && !done){ done = true; this.stats.lastError = er; this._say(text, rate, alt, attempt + 1).then(resolve); return; }
+            this.fail(er);
+          }
           finish();
         };
         this._keep = u; // 防止被垃圾回收导致 onend 不触发（Chrome 的老问题）

@@ -1398,6 +1398,7 @@ const SOUND_FIX = `
     <li><b>调大媒体音量</b>：按音量键时如果调的是铃声，点一下展开，把「媒体」音量拉高；关掉静音和勿扰模式。iPhone 还要关掉侧边的静音开关。</li>
     <li><b>用 Chrome 或 Safari 打开</b>：微信、QQ 等 App 里的内置浏览器通常不能发声。</li>
     <li><b>安装英文语音</b>（安卓最常见的原因）：小米、华为、荣耀、OPPO、vivo 自带的语音引擎大多只有中文。打开 <b>设置</b>，搜索「<b>文字转语音</b>」，把首选引擎改成「<b>Google 语音服务</b>」（Speech Services by Google）。如果没有这一项，先在 Google Play 安装「Speech Services by Google」，再到引擎设置里下载「英语（美国）」语音数据。</li>
+    <li><b>显示「语音引擎出错」</b>：说明引擎里有英文发音人，但语音包没下载，或者它要联网找 Google 而连不上。两个办法任选：① 打开 VPN 再测试；② 在「文字转语音」里点 Google 语音服务旁边的齿轮 › <b>安装语音数据</b> › 英语（美国），下载离线语音包，以后不开 VPN 也能用。</li>
     <li><b>iPhone</b>：设置 › 辅助功能 › 朗读内容 › 声音 › 英语，确认有英语（美国）的声音，没有就下载一个。</li>
     <li>设置好后，把这个 App 彻底关掉再重新打开，回到这里点「测试声音」。</li>
   </ol>`;
@@ -1413,8 +1414,9 @@ Views.me.renderDiag = function(){
   box.innerHTML = `
     <p>${status}</p>
     ${v ? `<p class="small muted">当前使用：${esc(v.name)}（${esc(v.lang)}）</p>` : ""}
+    ${Speech.all.length ? `<details class="small muted" style="margin-top:4px"><summary>手机里的全部语音</summary>${Speech.all.map(x => `<div>${esc(x.name)}，${esc(x.lang)}，${x.localService ? "本地" : "联网"}${x.default ? "，默认" : ""}</div>`).join("")}</details>` : ""}
     ${IN_APP_BROWSER ? `<p class="err" style="margin-top:6px">你现在是在 App 的内置浏览器里打开的，请复制网址到 Chrome 或 Safari 打开。</p>` : ""}
-    ${Speech.stats.lastError ? `<p class="small muted">上次朗读失败的原因：${esc({ "not-allowed": "浏览器拦截了自动朗读，点一下播放按钮再试", nostart: "发出了朗读指令但没有开始播放", "instant-end": "朗读瞬间结束，通常是没有英文语音", unsupported: "浏览器不支持朗读", "synthesis-failed": "语音引擎出错", "language-unavailable": "没有英文语音", "voice-unavailable": "选的发音人不可用", "audio-busy": "音频被占用" }[Speech.stats.lastError] || Speech.stats.lastError)}</p>` : ""}
+    ${Speech.stats.lastError ? `<p class="small muted">上次朗读失败的原因：${esc({ "not-allowed": "浏览器拦截了自动朗读，点一下播放按钮再试", nostart: "发出了朗读指令但没有开始播放", "instant-end": "朗读瞬间结束，通常是没有英文语音", unsupported: "浏览器不支持朗读", "synthesis-failed": "语音引擎出错（通常是英文语音包没下载，或者联网语音连不上 Google）", "language-unavailable": "没有英文语音", "voice-unavailable": "选的发音人不可用", "audio-busy": "音频被占用" }[Speech.stats.lastError] || Speech.stats.lastError)}</p>` : ""}
     <div class="row wrap" style="gap:8px;margin-top:12px">
       <button class="btn line sm" style="--c:var(--blue)" id="dg-tts">${ICON.play}<span>测试声音</span></button>
       <button class="btn ghost sm" id="dg-sr">${ICON.mic}<span>测试语音识别</span></button>
