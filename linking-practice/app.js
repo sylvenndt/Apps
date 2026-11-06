@@ -256,10 +256,14 @@ Views.review = {
     const r = await activeListen.done; activeListen = null;
     if(!$("#rv-shadow")) return;
     btn.innerHTML = `${ICON.mic}<span>跟读</span>`;
-    if(!r.text){ res.textContent = srErrorText(r.error); return; }
-    const tgt = normalize(card.en), got = normalize(r.text);
-    const pct = Math.round(100 * lcsLen(tgt, got) / Math.max(tgt.length, got.length, 1));
-    res.innerHTML = `<b class="${pct >= 85 ? "ok" : pct >= 60 ? "mid" : "no"}">${pct}%</b> 听到：“${esc(r.text)}”`;
+    const mine = r.audio ? ` <button class="chip" id="rv-mine">听我读的</button>` : "";
+    if(!r.text){ res.innerHTML = esc(srErrorText(r.error)) + mine; }
+    else {
+      const tgt = normalize(card.en), got = normalize(r.text);
+      const pct = Math.round(100 * lcsLen(tgt, got) / Math.max(tgt.length, got.length, 1));
+      res.innerHTML = `<b class="${pct >= 85 ? "ok" : pct >= 60 ? "mid" : "no"}">${pct}%</b> 听到：“${esc(r.text)}”${mine}`;
+    }
+    const mb = $("#rv-mine"); if(mb) mb.onclick = () => { Speech.stop(); Neural.play(r.audio, 1); };
   },
   grade(id, g){
     SRS.grade(id, g);
@@ -842,8 +846,11 @@ Views.speak = {
     Speech.stop();
     const base = input.value.trim();
     mic.classList.add("on"); mic.innerHTML = ICON.stop;
-    activeListen = startListening({ onText: t => input.value = (base ? base + " " : "") + t });
+    const ph = input.placeholder;
+    activeListen = startListening({ silenceMs: 2200, onStatus: m => input.placeholder = m, onText: t => input.value = (base ? base + " " : "") + t });
     const r = await activeListen.done; activeListen = null;
+    input.placeholder = ph;
+    if(r.local && r.text) input.value = (base ? base + " " : "") + r.text;
     mic.classList.remove("on"); mic.innerHTML = ICON.mic;
     if(!r.text && r.error && r.error !== "aborted") { toast(srErrorText(r.error)); }
   },
@@ -1130,13 +1137,14 @@ Views.link = {
   },
   async startRec(){
     if(!Link.tokens.length){ this.status("先输入一句英文。", true); return; }
+    if(Listener.engine() === "local") return this.startRecLocal();
     const keep = $("#lk-keep").checked;
     Link.stream = null; Link.recorder = null; Link.chunks = [];
     if(keep){
       if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder){ this.status("这里不能直接录音。请用 Safari 或 Chrome 打开，或者点「上传录音」。", true); return; }
       try{ Link.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
       catch(e){ this.status("没法使用麦克风（" + (e.name || e.message) + "）。请在浏览器里允许麦克风，或者点「上传录音」。", true); return; }
-    } else if(!SR){ this.status("这个浏览器不支持语音识别，请勾选「同时保存录音」。", true); return; }
+    } else if(!Listener.available()){ this.status("这个浏览器不支持语音识别，也不能录音。请用 Safari 或 Chrome 打开。", true); return; }
     Speech.stop();
     if(Link.stream){
       const mime = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm", "audio/ogg"].find(m => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m));
@@ -1154,7 +1162,26 @@ Views.link = {
     const t0 = Date.now(); clearInterval(Link.recTimer);
     Link.recTimer = setInterval(() => { if(Date.now() - t0 > 30000) this.stopRec(); }, 300);
   },
+  /* 手机上识别：自己录音，录音和识别用的是同一段声音，不会互相抢麦克风 */
+  async startRecLocal(){
+    Speech.stop();
+    Link.recording = true; Link.local = true; clearInterval(Link.recTimer);
+    const btn = $("#lk-rec"); btn.innerHTML = `${ICON.stop}<span>停止</span>`; btn.style.background = "var(--red)"; btn.style.color = "#fff";
+    $("#lk-live").textContent = "";
+    this.status("录音中… 读完整句后停一下，或者点「停止」。");
+    activeListen = startListening({ target: Link.text, maxMs: 29000, silenceMs: 1800, onStatus: m => this.status(m), onText: t => { const l = $("#lk-live"); if(l) l.textContent = t; } });
+    const rec = await activeListen.done; activeListen = null;
+    Link.recording = false; Link.local = false;
+    const b2 = $("#lk-rec"); if(b2){ b2.innerHTML = `${ICON.mic}<span>开始录音</span>`; b2.style.background = ""; b2.style.color = ""; }
+    if(!$("#lk-result")) return;
+    if(rec.error && !rec.audio){ this.status(srErrorText(rec.error), true); return; }
+    this.status("分析中…");
+    if(rec.audio) this.setAudio(rec.audio);
+    await this.analyze(rec.audio || null, rec.text ? rec : { text: "", error: rec.error });
+    if(!rec.text) this.status(srErrorText(rec.error), true);
+  },
   async stopRec(){
+    if(Link.local){ if(activeListen) activeListen.stop(); return; }
     if(!Link.recording) return;
     Link.recording = false; clearInterval(Link.recTimer);
     const btn = $("#lk-rec"); if(btn){ btn.innerHTML = `${ICON.mic}<span>开始录音</span>`; btn.style.background = ""; btn.style.color = ""; }
@@ -1240,6 +1267,8 @@ Views.me = {
       <div class="panel" id="me-diag"></div>
       <h3>性能检查</h3>
       <div class="panel" id="me-perf"></div>
+      <h3>跟读识别 <span class="small muted">麦克风</span></h3>
+      <div class="panel" id="stt-box"></div>
       <h3>发音人</h3>
       <div class="panel" id="nv-box"></div>
       <h3>朗读</h3>
@@ -1298,6 +1327,7 @@ Views.me = {
     };
     fill(); Views.me.fillVoices = fill;
     this.renderVoices();
+    this.renderStt();
     this.renderDiag();
     this.renderPerf();
     sel.onchange = () => { Settings.set("voice", sel.value); Speech.say("Hey! This is how I sound."); };
@@ -1558,6 +1588,62 @@ Views.me.renderVoices = function(){
   });
   $("#nv-clear").onclick = async () => { await Neural.clearCache(); toast("语音缓存已清除"); };
 };
+/* ================= 跟读识别 ================= */
+["fluent-stt", "fluent-mic"].forEach(ev => document.addEventListener(ev, () => { if(location.hash === "#me") Views.me.renderStt(); }));
+Views.me.renderStt = function(){
+  const box = $("#stt-box"); if(!box) return;
+  if(!this._micQueried){ this._micQueried = true; Mic.query().then(() => this.renderStt()); }
+  const eng = Settings.get("srEngine"), now = Listener.engine(), m = Whisper.model(), st = Whisper.state;
+  const micLine = !Mic.supported() ? `<span class="no">这个浏览器不能用麦克风</span>${IN_APP_BROWSER ? "，请复制网址到 Safari 或 Chrome 打开" : "，请用 Safari 或 Chrome 打开"}。`
+    : Mic.state === "granted" ? `<span class="ok">已允许使用麦克风</span>`
+    : Mic.state === "denied" ? `<span class="no">麦克风权限被拒绝了</span><br><span class="small">${esc(MIC_FIX)}</span>`
+    : `还没允许使用麦克风。点下面的按钮，手机会弹出「允许使用麦克风」，点「允许」。`;
+  const model = st === "ready" ? `<span class="ok">识别模型已就绪</span>（${esc(m.name)}）`
+    : st === "loading" ? `正在下载识别模型… <b>${Math.round(Whisper.progress * 100)}%</b><div class="bar2"><i style="width:${Math.round(Whisper.progress * 100)}%"></i></div>`
+    : st === "error" ? `<span class="no">模型加载失败</span>：${esc(Whisper.error)}<br><span class="small muted">国内网络请先打开 VPN 再重试。</span>`
+    : Whisper.downloaded() ? `识别模型已下载（${esc(m.name)}），用的时候自动启动。` : `还没下载（${esc(m.desc)}）。`;
+  const nowTxt = now === "local" ? "现在用的是：手机上识别" : now === "system" ? "现在用的是：手机自带识别" : "这个浏览器没法识别";
+  box.innerHTML = `
+    <p class="small">${micLine}</p>
+    ${Mic.supported() && Mic.state !== "granted" ? `<button class="btn line sm" style="--c:var(--green);margin-top:8px" id="stt-mic">${ICON.mic}<span>允许使用麦克风</span></button>` : ""}
+    <div class="field" style="margin-top:14px"><label>用哪种识别 <span class="small muted">${nowTxt}</span></label>
+      <div class="chips" style="flex-wrap:wrap">
+        ${[["auto", "自动"], ["local", "手机上识别"], ["system", "手机自带识别"]].map(([k, n]) => `<button class="chip${eng === k ? " on" : ""}" data-sre="${k}">${n}</button>`).join("")}
+      </div>
+      <p class="help">${eng === "auto" ? "先用手机自带的识别，它在这台手机上用不了时（比如连不上 Google、主屏幕上的 iPhone App），自动改用手机上识别。" : eng === "local" ? "App 自己录音，用开源 Whisper 模型在手机上识别。不联网、不依赖 Google 或 Siri，还能回放自己读的。第一次要下载模型。" : "用浏览器自带的识别：安卓靠 Google，iPhone 靠 Siri 听写。识别快、有实时字幕，但有的手机用不了。"}</p>
+      ${store.get("srBroken") && eng === "auto" ? `<p class="small muted">之前手机自带识别失败过，所以自动改成了手机上识别。<button class="link" id="stt-retry">再试试自带识别</button></p>` : ""}
+    </div>
+    ${eng !== "system" ? `<div class="field"><label>手机上识别的模型</label>
+      <div class="chips">${Object.entries(STT_MODELS).map(([k, x]) => `<button class="chip${Settings.get("sttModel") === k ? " on" : ""}" data-stm="${k}">${x.name}（${x.mb}MB）</button>`).join("")}</div>
+      <p class="small" style="margin-top:8px">${model}</p>
+      ${st !== "ready" && st !== "loading" ? `<button class="btn line sm" style="--c:var(--blue);margin-top:8px" id="stt-dl">${Whisper.downloaded() ? "现在启动" : st === "error" ? "重新下载" : `下载模型（约 ${m.mb}MB）`}</button>` : ""}
+    </div>` : ""}
+    <div class="row wrap" style="gap:8px;margin-top:6px"><button class="btn ghost sm" id="stt-test">${ICON.mic}<span>${this._sttTesting ? "说完了" : "说一句试试"}</span></button></div>
+    <p class="small" id="stt-res" style="margin-top:10px">${this._sttMsg || ""}</p>`;
+  const keep = fn => () => { const y = window.scrollY; fn(); this.renderStt(); window.scrollTo(0, y); };
+  const mb = $("#stt-mic"); if(mb) mb.onclick = async () => { const r = await Mic.ensure(); toast(r.ok ? "麦克风已允许" : srErrorText(r.error)); this.renderStt(); };
+  $$("[data-sre]").forEach(b => b.onclick = keep(() => Settings.set("srEngine", b.dataset.sre)));
+  $$("[data-stm]").forEach(b => b.onclick = keep(() => { Settings.set("sttModel", b.dataset.stm); if(Whisper.state === "ready" || Whisper.state === "loading") Whisper.reset(); }));
+  const dl = $("#stt-dl"); if(dl) dl.onclick = keep(() => Whisper.load());
+  const rt = $("#stt-retry"); if(rt) rt.onclick = keep(() => { store.set("srBroken", false); Listener.fails = 0; });
+  const msg = html => { this._sttMsg = html; const el = $("#stt-res"); if(el) el.innerHTML = html; bindMine(); };
+  const bindMine = () => { const pm = $("#stt-mine"); if(pm && this._sttAudio) pm.onclick = () => { Speech.stop(); Neural.play(this._sttAudio, 1); }; };
+  bindMine();
+  $("#stt-test").onclick = async () => {
+    if(activeListen){ stopActiveListen(); return; }
+    Speech.stop();
+    this._sttTesting = true; this._sttAudio = null;
+    const lab = $("#stt-test span"); if(lab) lab.textContent = "说完了";
+    msg("请说一句英语，比如 “How are you today?”");
+    activeListen = startListening({ onStatus: m => msg(esc(m)), onText: t => msg("听到：" + esc(t)) });
+    const r = await activeListen.done; activeListen = null;
+    this._sttTesting = false; this._sttAudio = r.audio || null;
+    const lab2 = $("#stt-test span"); if(lab2) lab2.textContent = "说一句试试";
+    msg((r.text ? `<span class="ok">识别正常</span>，听到：“${esc(r.text)}”` : `<span class="no">没识别出来</span>：${esc(srErrorText(r.error))}`) + (r.audio ? ` <button class="chip" id="stt-mine">听我说的</button>` : ""));
+    if(location.hash === "#me") this.renderStt();
+  };
+};
+
 /* 手机上的 AI 模型只在需要现场生成的页面（口语教练、连读跟读）才启动，平时不占手机算力 */
 function neuralSoon(){
   if(!Neural.wanted() || !store.get("neuralReady") || Neural.state !== "off") return;
@@ -1628,9 +1714,9 @@ Views.me.renderDiag = function(){
   };
   $("#dg-sr").onclick = async () => {
     const res = $("#dg-res");
-    if(!SR){ res.innerHTML = `<span class="no">这个浏览器不支持语音识别。</span>安卓请用 Chrome（需要 Google 服务），iPhone 用 Safari。可以改用输入法自带的语音输入。`; return; }
+    if(!Listener.available()){ res.innerHTML = `<span class="no">这个浏览器不支持语音识别，也不能录音。</span>请用 Safari 或 Chrome 打开。`; return; }
     res.innerHTML = "请说一句英语，比如 “How are you today?”…";
-    const L = startListening({ onText: t => res.textContent = "听到：" + t });
+    const L = startListening({ onStatus: m => res.textContent = m, onText: t => res.textContent = "听到：" + t });
     setTimeout(() => L.stop(), 6000);
     const r = await L.done;
     res.innerHTML = r.text ? `<span class="ok">语音识别正常</span>，听到：“${esc(r.text)}”` : `<span class="no">识别失败</span>：${esc(srErrorText(r.error))}`;

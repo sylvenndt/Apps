@@ -23,7 +23,7 @@ const store = {
 window.addEventListener("storage", e => { if(e.key && e.key.startsWith("fluent:")) store._c.delete(e.key.slice(7)); });
 
 const Settings = {
-  defaults: { speed: 0.9, voice: "", reactSec: 8, engine: "neural", cast: "scene", accent: "both", voice1: "af_heart", voice2: "am_michael", apiKey: "", model: "claude-sonnet-5-5", keepAudio: true, reviewMode: "listen", focus: [], newPerDay: 10, newWordsPerDay: 15, mix: { scenes: true, vocab: true, pattern: true }, startLevel: "B1" },
+  defaults: { speed: 0.9, voice: "", reactSec: 8, engine: "neural", cast: "scene", accent: "both", voice1: "af_heart", voice2: "am_michael", apiKey: "", model: "claude-sonnet-5-5", srEngine: "auto", sttModel: "tiny", keepAudio: true, reviewMode: "listen", focus: [], newPerDay: 10, newWordsPerDay: 15, mix: { scenes: true, vocab: true, pattern: true }, startLevel: "B1" },
   get(k){ const s = store.get("settings", {}); return k in s ? s[k] : this.defaults[k]; },
   set(k, v){ const s = store.get("settings", {}); s[k] = v; store.set("settings", s); }
 };
@@ -323,7 +323,8 @@ if(TTS_OK){
 /* ---------- 语音识别 ---------- */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let activeRecognizer = null;
-function startListening({ onText, target } = {}){
+/* 浏览器自带的语音识别；页面里统一调用 stt.js 的 startListening，它会决定用哪种识别 */
+function startSystemListening({ onText, target } = {}){
   if(!SR) return { stop(){}, done: Promise.resolve({ error: "unsupported", text: "" }) };
   let r, finals = [], confs = [], err = null, interim = "";
   const done = new Promise(resolve => {
@@ -358,12 +359,13 @@ function startListening({ onText, target } = {}){
   return { stop(){ try{ r && r.stop(); }catch(_){} }, done: Promise.race([done, new Promise(res => setTimeout(() => res({ text: interim, error: "timeout" }), 60000))]) };
 }
 function srErrorText(e){
+  if(typeof SR_ERR_MORE !== "undefined" && SR_ERR_MORE[e]) return SR_ERR_MORE[e];
   return ({
-    unsupported: "这个浏览器不支持语音识别，可以用输入法自带的语音输入。",
-    network: "语音识别需要联网，现在连不上识别服务。",
-    "not-allowed": "没有麦克风权限，请在浏览器设置里允许。",
-    "service-not-allowed": "浏览器不允许语音识别。",
-    "audio-capture": "麦克风被占用了。",
+    unsupported: "这个浏览器不支持语音识别，也不能录音。请用 Safari 或 Chrome 打开。",
+    network: "手机自带的语音识别连不上服务器（安卓要能连上 Google）。可以在「我的 → 跟读识别」改用手机上识别。",
+    "not-allowed": "没有麦克风权限。" + (typeof MIC_FIX !== "undefined" ? MIC_FIX : "请在浏览器设置里允许麦克风。"),
+    "service-not-allowed": "这台手机不允许网页用自带的语音识别（iPhone 要打开 Siri 和听写）。可以在「我的 → 跟读识别」改用手机上识别。",
+    "audio-capture": "麦克风被占用了，或者没拿到麦克风权限。",
     "no-speech": "没听到声音，靠近麦克风再试一次。",
     "language-not-supported": "手机的语音识别不支持英语，需要安装 Google 语音服务。",
     "start-failed": "语音识别没能启动，稍等一下再点一次。",
