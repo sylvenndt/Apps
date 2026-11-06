@@ -7,10 +7,19 @@ const shuffle = a => { a = [...a]; for(let i=a.length-1;i>0;i--){ const j=Math.f
 
 /* ---------- 本地存储 ---------- */
 const store = {
-  get(k, d){ try{ const v = localStorage.getItem("fluent:" + k); return v === null ? d : JSON.parse(v); }catch(_){ return d; } },
-  set(k, v){ try{ localStorage.setItem("fluent:" + k, JSON.stringify(v)); }catch(_){} },
+  _c: new Map(),
+  get(k, d){
+    if(this._c.has(k)){ const v = this._c.get(k); return v === undefined ? d : v; }
+    let v;
+    try{ const raw = localStorage.getItem("fluent:" + k); v = raw === null ? undefined : JSON.parse(raw); }catch(_){ v = undefined; }
+    this._c.set(k, v);
+    return v === undefined ? d : v;
+  },
+  set(k, v){ this._c.set(k, v); try{ localStorage.setItem("fluent:" + k, JSON.stringify(v)); }catch(_){} },
   keys(){ try{ return Object.keys(localStorage).filter(k => k.startsWith("fluent:")).map(k => k.slice(7)); }catch(_){ return []; } }
 };
+// 其他标签页改了数据时，丢掉缓存
+window.addEventListener("storage", e => { if(e.key && e.key.startsWith("fluent:")) store._c.delete(e.key.slice(7)); });
 
 const Settings = {
   defaults: { speed: 0.9, voice: "", reactSec: 8, engine: "system", cast: "scene", accent: "both", voice1: "af_heart", voice2: "am_michael", apiKey: "", model: "claude-sonnet-5-5", keepAudio: true, reviewMode: "listen", focus: [], newPerDay: 10, newWordsPerDay: 15, mix: { scenes: true, vocab: true, pattern: true }, startLevel: "B1" },
@@ -62,7 +71,8 @@ const Cards = {
     const s = SRS.all(); delete s[id]; store.set("srs", s);
   },
   get(id){
-    const lib = ALL_ITEMS.find(x => x.id === id);
+    if(!id) return null;
+    const lib = ITEM_BY_ID[id];
     if(lib) return lib;
     if(typeof EXTRA_CARDS !== "undefined" && EXTRA_CARDS[id]) return EXTRA_CARDS[id];
     const u = this.user().find(x => x.id === id);

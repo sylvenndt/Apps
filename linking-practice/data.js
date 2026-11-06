@@ -698,3 +698,4 @@ SCENES.forEach(s => s.items.forEach((it, i) => ALL_ITEMS.push({
   id: `${s.key}-${i}`, scene: s.key, en: it[0].replace(/\s*\|\s*/g, " ").trim(), chunks: it[0].split("|").map(x => x.trim()), zh: it[1], reply: it[2]
 })));
 const SCENE_BY_KEY = Object.fromEntries(SCENES.map(s => [s.key, s]));
+const ITEM_BY_ID = Object.fromEntries(ALL_ITEMS.map(x => [x.id, x]));

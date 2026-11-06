@@ -277,7 +277,8 @@ Views.library = {
         <h3>${esc(c.name)}</h3>
         <div class="panel" style="padding:2px 16px">
           ${c.scenes.map(k => {
-            const sc = SCENE_BY_KEY[k], prog = SRS.sceneProgress(k), on = focus.includes(k);
+            const sc = SCENE_BY_KEY[k], on = focus.includes(k);
+            const prog = sc.items.reduce((n, _, i) => n + (s[`${k}-${i}`] && s[`${k}-${i}`].reps > 0 ? 1 : 0), 0);
             return `
             <div class="scene-row">
               <button class="scene-head" data-open="${k}">${bulletHTML(k)}
@@ -458,6 +459,7 @@ Views.listen = {
     }).filter(Boolean);
     if(!Listen.qs.length){ toast("这些句子还出不了题，换个场景试试"); return; }
     Listen.i = 0; Listen.results = []; Listen.state = "q";
+    Listen.qs.forEach(q => Neural.prefetch(q.it.en, q.it.scene));
     this.renderQ();
   },
   renderQ(){
@@ -1490,7 +1492,10 @@ Views.me.renderVoices = function(){
   });
   $("#nv-clear").onclick = async () => { await Neural.clearCache(); toast("语音缓存已清除"); };
 };
-if(Settings.get("engine") === "neural" && store.get("neuralReady")) setTimeout(() => Neural.load(), 800);
+if(Settings.get("engine") === "neural" && store.get("neuralReady")){
+  const boot = () => Neural.load();
+  if("requestIdleCallback" in window) requestIdleCallback(boot, { timeout: 3000 }); else setTimeout(boot, 1500);
+}
 
 /* ================= 声音检查 ================= */
 let lastSoundProblem = null;
@@ -1590,4 +1595,4 @@ document.addEventListener("click", e => {
 });
 window.addEventListener("hashchange", route);
 route();
-if("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
+if("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) navigator.serviceWorker.register("sw.js").catch(() => {});
