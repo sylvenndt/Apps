@@ -167,6 +167,7 @@ Views.review = {
         <p class="small muted" style="text-align:center" id="rv-tip">用英语把这句说出来。想不起来就先说个大概。</p>`}
         <div class="row" style="justify-content:center;margin-top:14px"><button class="mic lg" id="rv-say" style="--c:var(--blue)" aria-label="开始说">${ICON.mic}</button></div>
         <p id="rv-said" style="text-align:center;font-weight:600;min-height:24px;margin-top:10px"></p>
+        <div id="rv-eval"></div>
         <div class="row" style="justify-content:center"><button class="chip" id="rv-reveal">看答案</button></div>`;
     v.innerHTML = `${this.header(Review.queue.length - Review.idx)}
       <div class="panel" style="margin-top:14px">
@@ -183,7 +184,8 @@ Views.review = {
             <div><div class="small muted">对方可能这样回</div><div style="font-weight:600">${esc(card.reply)}${emoTag(card.reply, "sm")}</div></div></div>` : ""}
           ${type === "listen" ? `<div class="row" style="margin-top:14px">
             <button class="btn soft sm" id="rv-shadow">${ICON.mic}<span>跟读</span></button>
-            <span class="small muted grow" id="rv-shadow-res"></span></div>` : ""}
+            <span class="small muted grow" id="rv-shadow-res"></span></div>
+          <div id="rv-shadow-eval"></div>` : ""}
         </div>
       </div>
       <div id="rv-grades" style="margin-top:16px" hidden>
@@ -245,6 +247,8 @@ Views.review = {
     if(!r.text){ out.textContent = srErrorText(r.error); return; }
     Review.said = r.text; out.textContent = "“" + r.text + "”";
     if(!Review.revealed) this.reveal(card, "speak");
+    const ev = card.single ? { ref: r.text } : card.scene === "vocab" ? { ref: r.text, zh: `用「${card.word}」说一句话`, model: card.en, grammar: true } : { ref: r.text, zh: card.zh, model: card.en, grammar: true };
+    evaluateSpeech($("#rv-eval"), r, ev);
   },
   async shadow(card){
     const btn = $("#rv-shadow"), res = $("#rv-shadow-res");
@@ -264,6 +268,7 @@ Views.review = {
       res.innerHTML = `<b class="${pct >= 85 ? "ok" : pct >= 60 ? "mid" : "no"}">${pct}%</b> 听到：“${esc(r.text)}”${mine}`;
     }
     const mb = $("#rv-mine"); if(mb) mb.onclick = () => { Speech.stop(); Neural.play(r.audio, 1); };
+    evaluateSpeech($("#rv-shadow-eval"), r, { ref: card.en });
   },
   grade(id, g){
     SRS.grade(id, g);
@@ -792,6 +797,7 @@ Views.speak = {
           <textarea id="sp-input" rows="2" placeholder="${Speak.turns.length ? "接着回应对方…" : "你先开口，用英语说出来…"}"></textarea>
           <button class="mic" id="sp-mic" aria-label="语音输入">${ICON.mic}</button>
         </div>
+        <div id="sp-eval"></div>
         <button class="btn line block" style="--c:var(--green);margin-top:10px;padding:13px" id="sp-send">${hasKey ? "改成地道说法" : "复制，去 Claude 批改"}</button>
         ${hasKey ? "" : `<p class="small muted" style="margin-top:8px">在「我的」里填上 Anthropic API 密钥，就能直接在这里批改，并且接着对话。</p>`}
         <p class="err" id="sp-err" hidden></p>
@@ -852,6 +858,9 @@ Views.speak = {
     input.placeholder = ph;
     if(r.local && r.text) input.value = (base ? base + " " : "") + r.text;
     mic.classList.remove("on"); mic.innerHTML = ICON.mic;
+    if(r.text && r.audio){
+      evaluateSpeech($("#sp-eval"), r, { ref: r.text, compact: true });
+    }
     if(!r.text && r.error && r.error !== "aborted") { toast(srErrorText(r.error)); }
   },
   async send(){
@@ -1011,6 +1020,7 @@ Object.assign(Views.speak, {
     R.said = r.text || "";
     out.textContent = r.text ? "“" + r.text + "”" : srErrorText(r.error);
     this.showReflexAnswer();
+    if(r.text && $("#rf-res")){ $("#rf-res").insertAdjacentHTML("afterbegin", `<div id="rf-eval"></div>`); evaluateSpeech($("#rf-eval"), r, { ref: r.text }); }
   },
   showReflexAnswer(){
     const R = Speak.reflex, it = R.items[R.i];
@@ -1179,6 +1189,11 @@ Views.link = {
     if(rec.audio) this.setAudio(rec.audio);
     await this.analyze(rec.audio || null, rec.text ? rec : { text: "", error: rec.error });
     if(!rec.text) this.status(srErrorText(rec.error), true);
+    const lr = $("#lk-result");
+    if(lr && rec.audio){
+      let pb = $("#lk-pron"); if(!pb){ lr.insertAdjacentHTML("afterbegin", `<div id="lk-pron"></div>`); pb = $("#lk-pron"); }
+      evaluateSpeech(pb, rec, { ref: Link.text });
+    }
   },
   async stopRec(){
     if(Link.local){ if(activeListen) activeListen.stop(); return; }
@@ -1265,6 +1280,8 @@ Views.me = {
       <h1>我的 <span class="small muted" style="font-weight:500">版本 ${APP_VERSION}</span></h1>
       <h3>跟读识别 <span class="small muted">麦克风</span></h3>
       <div class="panel" id="stt-box"></div>
+      <h3>发音打分 <span class="small muted">微软 Azure</span></h3>
+      <div class="panel" id="pron-box"></div>
       <h3>声音检查</h3>
       <div class="panel" id="me-diag"></div>
       <h3>性能检查</h3>
@@ -1328,6 +1345,7 @@ Views.me = {
     fill(); Views.me.fillVoices = fill;
     this.renderVoices();
     this.renderStt();
+    this.renderPron();
     this.renderDiag();
     this.renderPerf();
     sel.onchange = () => { Settings.set("voice", sel.value); Speech.say("Hey! This is how I sound."); };
@@ -1588,6 +1606,48 @@ Views.me.renderVoices = function(){
   });
   $("#nv-clear").onclick = async () => { await Neural.clearCache(); toast("语音缓存已清除"); };
 };
+/* ================= 发音打分设置 ================= */
+Views.me.renderPron = function(){
+  const box = $("#pron-box"); if(!box) return;
+  const key = Settings.get("azureKey"), reg = Settings.get("azureRegion");
+  box.innerHTML = `
+    <p class="small">${key ? `<span class="ok">已填好 Azure 密钥</span>。跟读、看中文说英文、口语、连读录完音后会自动打分。本月大约用了 ${Pron.usedMin()} 分钟（免费 300 分钟）。` : "填上微软 Azure 的密钥后，每次读完都会给总分、准确、流利、完整、语调的分数，每个词、每个音单独打分，还会告诉你把哪个音读成了什么。免费档每月 5 小时，自己练完全够用。"}</p>
+    <div class="field" style="margin-top:10px"><label for="pr-key">Azure 语音密钥</label>
+      <input type="password" id="pr-key" placeholder="一串 32 位或更长的字母数字" autocomplete="off" value="${esc(key)}"></div>
+    <div class="field"><label for="pr-reg">区域 <span class="small muted">要和创建资源时选的一样</span></label>
+      <select id="pr-reg">${AZURE_REGIONS.map(([k, n]) => `<option value="${k}"${k === reg ? " selected" : ""}>${n}（${k}）</option>`).join("")}</select></div>
+    <div class="row wrap" style="gap:8px"><button class="btn ghost sm" id="pr-test">${ICON.mic}<span>读一句试试</span></button></div>
+    <p class="small" id="pr-res" style="margin-top:8px"></p>
+    <div id="pr-out"></div>
+    <details class="small" style="margin-top:10px"><summary class="link">怎么申请免费的 Azure 密钥（约 10 分钟）</summary>
+      <ol style="padding-left:20px;margin:8px 0;line-height:1.7">
+        <li>打开 azure.microsoft.com，点「免费试用」，用微软账号登录（没有就注册一个）。注册要手机号验证，还要绑一张 Visa 或万事达卡验证身份，免费档不会扣钱。</li>
+        <li>登录 portal.azure.com，在顶部搜索框搜「语音服务」（Speech services），点「创建」。</li>
+        <li>「订阅」选默认的；「资源组」点「新建」随便起个名；「区域」选 East Asia（香港）或 Japan East；「名称」随便填；<b>「定价层」一定选 Free F0</b>。</li>
+        <li>点「查看 + 创建」→「创建」，等一分钟部署完成，点「转到资源」。</li>
+        <li>左边菜单点「密钥和终结点」，复制「密钥 1」粘贴到上面，「区域」选和第 3 步一样的。</li>
+      </ol>
+      <span class="muted">国内网络打开 Azure 网站和打分时都建议开 VPN。密钥只保存在这台手机上。</span>
+    </details>`;
+  $("#pr-key").onchange = e => { Settings.set("azureKey", e.target.value.trim()); toast(e.target.value.trim() ? "密钥已保存" : "已清除密钥"); this.renderPron(); };
+  $("#pr-reg").onchange = e => { Settings.set("azureRegion", e.target.value); toast("区域已保存"); };
+  $("#pr-test").onclick = async () => {
+    Settings.set("azureKey", $("#pr-key").value.trim());
+    const res = $("#pr-res"), out = $("#pr-out");
+    if(!Pron.ready()){ res.textContent = "先填密钥"; return; }
+    if(activeListen){ stopActiveListen(); return; }
+    Speech.stop();
+    const ref = "Nice to meet you. How was your weekend?";
+    res.innerHTML = `请读：<b>${ref}</b>`; out.innerHTML = "";
+    activeListen = startListening({ target: ref, onStatus: m => res.innerHTML = `请读：<b>${ref}</b><br>${esc(m)}`, onText: t => res.innerHTML = `请读：<b>${ref}</b><br>听到：${esc(t)}` });
+    const r = await activeListen.done; activeListen = null;
+    if(!r.audio){ res.textContent = "没录到声音：" + srErrorText(r.error) + (r.error === "switched" ? "" : "（发音打分要用「手机上识别」录音）"); return; }
+    res.innerHTML = `请读：<b>${ref}</b>`;
+    const ev = await evaluateSpeech(out, r, { ref });
+    if(ev && ev.pron) res.innerHTML = `<span class="ok">Azure 打分正常</span>`;
+  };
+};
+
 /* ================= 跟读识别 ================= */
 ["fluent-stt", "fluent-mic"].forEach(ev => document.addEventListener(ev, () => { if(location.hash === "#me") Views.me.renderStt(); }));
 Views.me.renderStt = function(){

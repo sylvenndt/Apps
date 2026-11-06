@@ -314,3 +314,29 @@ button:active,.btn:active,.chip:active,.opt:active:not(:disabled),.tile:active,.
 /* 新版本提示 */
 .upd-bar{position:fixed;left:12px;right:12px;top:calc(env(safe-area-inset-top, 0px) + 10px);z-index:60;border:0;border-radius:14px;padding:13px 16px;
   background:var(--green);color:#fff;font:inherit;font-weight:700;font-size:15px;box-shadow:0 6px 24px rgba(0,0,0,.25);cursor:pointer}
+
+/* 发音打分 */
+.pron{margin-top:12px;padding:14px;border-radius:16px;background:var(--sunk)}
+.pron-top{display:flex;gap:14px;align-items:center}
+.pron-total{flex:0 0 auto;width:74px;height:74px;border-radius:50%;display:grid;place-items:center;align-content:center;border:4px solid currentColor;color:var(--muted)}
+.pron-total b{font-size:26px;line-height:1}.pron-total span{font-size:10px;color:var(--muted);margin-top:2px}
+.pron-total.ok{color:var(--ok)}.pron-total.mid{color:var(--amber)}.pron-total.no{color:var(--bad)}
+.pron-bars{flex:1;display:grid;gap:5px}
+.pb{display:grid;grid-template-columns:30px 1fr 28px;align-items:center;gap:6px;font-size:12px}
+.pb i{height:6px;border-radius:3px;background:var(--rule);overflow:hidden}.pb em{display:block;height:100%;background:var(--muted)}
+.pb em.ok{background:var(--ok)}.pb em.mid{background:var(--amber)}.pb em.no{background:var(--bad)}
+.pb b{text-align:right}.pb b.mid,.pp.mid,.pw.mid{color:var(--amber)}
+.pron-words{margin:12px 0 4px;line-height:2.1;font-size:18px}
+.pw{border:0;background:none;font:inherit;font-weight:700;padding:1px 3px;border-radius:6px;cursor:pointer;color:var(--ink)}
+.pw.ok{color:var(--ok)}.pw.no{color:var(--bad);text-decoration:underline wavy;text-underline-offset:4px}
+.pw.om{color:var(--muted);text-decoration:line-through}.pw.ins{color:var(--violet);font-style:italic}
+.pw.sel{background:var(--surface);box-shadow:0 0 0 1px var(--rule)}
+.pbrk{color:var(--bad);font-weight:800;margin:0 2px}
+.pron-detail{margin-top:10px;padding:10px 12px;border-radius:12px;background:var(--surface);font-size:14px}
+.pp{display:inline-flex;flex-direction:column;align-items:center;padding:3px 7px;border-radius:8px;background:var(--sunk);font-weight:700;font-size:13px}
+.pp.ok{color:var(--ok)}.pp.no{color:var(--bad)}.pp small{font-weight:500;font-size:10px;color:var(--muted)}
+.pron-tips{margin-top:10px}.pron-tips p{font-size:14px;margin:4px 0;line-height:1.55}
+.pron-good{margin-top:10px;color:var(--ok);font-weight:600;font-size:14px}
+.pron.compact .pron-words{font-size:16px}.pron.compact .pron-total{width:60px;height:60px}.pron.compact .pron-total b{font-size:21px}
+.gfix{margin-top:10px;padding:12px 14px;border-radius:16px;background:var(--sunk)}
+.gfix-line{margin:6px 0;font-size:15px}

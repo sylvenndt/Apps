@@ -7,8 +7,8 @@
    「自动」模式下，系统识别用不了时会自动改用手机上识别。 */
 const IS_STANDALONE = (() => { try{ return matchMedia("(display-mode: standalone)").matches || navigator.standalone === true; }catch(_){ return false; } })();
 const STT_MODELS = {
-  tiny: { id: "Xenova/whisper-tiny.en", mb: 41, name: "快速", desc: "约 41MB，识别快，适合跟读打分" },
-  base: { id: "Xenova/whisper-base.en", mb: 77, name: "更准", desc: "约 77MB，口音重时更准，识别慢一点" }
+  small: { id: "distil-whisper/distil-small.en", mb: 172, name: "最准", desc: "约 172MB，接近手机输入法的语音转文字，口音重也认得出（推荐）" },
+  base: { id: "Xenova/whisper-base.en", mb: 77, name: "标准", desc: "约 77MB，下载快，识别也快，但口音重时容易认错" }
 };
 /* 要用打包了 onnxruntime 的完整版（transformers.min.js）；transformers.web.js 需要另外引入 onnxruntime，直接 import 会失败 */
 const TRANSFORMERS_URLS = [
@@ -207,7 +207,7 @@ self.onmessage = async e => {
 }
 const Whisper = {
   state: "off", progress: 0, error: "", worker: null, files: {}, jobs: new Map(), seq: 0, waiters: [], loaded: null,
-  model(){ return STT_MODELS[Settings.get("sttModel")] || STT_MODELS.tiny; },
+  model(){ return STT_MODELS[Settings.get("sttModel")] || STT_MODELS.small; },
   downloaded(){ return store.get("sttReady") === this.model().id; },
   emit(){ document.dispatchEvent(new Event("fluent-stt")); },
   reset(){ try{ this.worker && this.worker.terminate(); }catch(_){} this.worker = null; this.state = "off"; this.loaded = null; this.emit(); },
@@ -255,6 +255,8 @@ const Whisper = {
     return new Promise((res, rej) => { this.jobs.set(id, { res, rej }); this.worker.postMessage({ type: "run", id, pcm }, [pcm.buffer]); });
   }
 };
+/* 版本 19 起默认用更准的模型：之前选过的也换一次（没下载的会在第一次用时询问） */
+if(!store.get("sttMig19")){ if(Settings.get("sttModel") !== "small") Settings.set("sttModel", "small"); store.set("sttMig19", true); }
 /* Whisper 遇到噪音会输出 [BLANK_AUDIO]、(music) 之类，去掉 */
 const cleanStt = t => String(t || "").replace(/\[[^\]]*\]|\([^)]*\)|\*[^*]*\*/g, " ").replace(/\s+/g, " ").trim();
 
@@ -326,7 +328,7 @@ function localListen(opts){
     if(Whisper.state === "ready") status("识别中…");
     try{
       const text = cleanStt(await Whisper.transcribe(r.pcm));
-      return { text, confidence: 0, error: text ? null : "no-speech", audio: r.wav, local: true };
+      return { text, confidence: 0, error: text ? null : "no-speech", audio: r.wav, seconds: r.seconds, local: true };
     }catch(e){ return { text: "", error: "local-failed", detail: e.message, audio: r.wav }; }
     finally{ document.removeEventListener("fluent-stt", prog); }
   })();
