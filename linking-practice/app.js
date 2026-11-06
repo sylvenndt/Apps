@@ -376,9 +376,13 @@ Views.listen = {
         <button class="chip${sel === "patterns" ? " on" : ""}" data-s="patterns">句型句式</button>
         ${learnedN ? `<button class="chip${sel === "learned" ? " on" : ""}" data-s="learned">我学过的（${learnedN}）</button>` : ""}
       </div>
-      <div class="chips" id="ls-scenes" style="margin-top:8px">
-        ${SCENES.map(s => `<button class="chip${sel === s.key ? " on" : ""}" data-s="${s.key}"><i class="mini-bullet" style="--c:${s.color}"></i>${esc(s.name)}</button>`).join("")}
-      </div>
+      ${(() => {
+        const curCat = sel.startsWith("cat:") ? sel.slice(4) : SCENE_BY_KEY[sel] && !SCENE_BY_KEY[sel].virtual ? SCENE_BY_KEY[sel].cat : null;
+        const c = CATS.find(x => x.key === curCat);
+        return c ? `<div class="chips wrap2" id="ls-scenes" style="margin-top:10px">
+          ${c.scenes.map(k => SCENE_BY_KEY[k]).map(s => `<button class="chip${sel === s.key ? " on" : ""}" data-s="${s.key}">${bulletHTML(s.key).replace('class="bullet', 'class="bullet xs')}${esc(s.name)}</button>`).join("")}
+        </div>` : `<p class="small muted" style="margin-top:8px">先点一个分类，可以再细选到具体话题。</p>`;
+      })()}
       <h3>反应时间</h3>
       <div class="chips" id="ls-react">
         ${[[12, "宽松 12 秒"], [8, "标准 8 秒"], [5, "挑战 5 秒"]].map(([s, l]) => `<button class="chip${rs === s ? " on" : ""}" data-r="${s}">${l}</button>`).join("")}
@@ -392,7 +396,7 @@ Views.listen = {
         <span class="play sm" style="--c:var(--ink)">${ICON.play}</span>
       </button>
       <p class="small muted" style="margin-top:12px">题型有三种：听完选怎么回应、听准句子里的小词、判断在哪个场景。答错或超时的句子会自动加入复习。</p>`;
-    $$("#ls-cats .chip, #ls-scenes .chip").forEach(b => b.onclick = () => { Listen.scene = b.dataset.s; $$("#ls-cats .chip, #ls-scenes .chip").forEach(x => x.classList.toggle("on", x === b)); });
+    $$("#ls-cats .chip, #ls-scenes .chip").forEach(b => b.onclick = () => { Listen.scene = b.dataset.s; const y = window.scrollY; this.renderSetup(); window.scrollTo(0, y); });
     $$("#ls-react .chip").forEach(b => b.onclick = () => { Settings.set("reactSec", +b.dataset.r); $$("#ls-react .chip").forEach(x => x.classList.toggle("on", x === b)); });
     $("#ls-speed").oninput = e => { Settings.set("speed", +e.target.value); $("#ls-speed-v").textContent = (+e.target.value).toFixed(2) + "×"; };
     $("#ls-start").onclick = () => this.start();

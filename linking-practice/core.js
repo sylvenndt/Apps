@@ -108,7 +108,7 @@ const SRS = {
           }
       };
       if(focus.length) rounds(focus.map(k => SCENE_BY_KEY[k]));
-      if(out.length < room) rounds(SCENES);
+      if(out.length < room) rounds(SCENES.filter(sc => !sc.pack));
       sources.push(out);
     }
     const byLevel = list => LEVELS.slice(Math.max(0, lv)).concat(LEVELS.slice(0, Math.max(0, lv))).flatMap(L => list.filter(x => x.level === L));
