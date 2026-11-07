@@ -347,3 +347,11 @@ button:active,.btn:active,.chip:active,.opt:active:not(:disabled),.tile:active,.
 .me-btn svg{width:21px;height:21px}
 .me-btn.on{color:var(--ink);border-color:currentColor}
 @media (prefers-color-scheme:dark){.me-btn{background:rgba(30,32,38,.84)}}
+/* 今日主题卡片：留白和层级统一 */
+.theme .theme-k{font-size:12px;font-weight:600;letter-spacing:.08em;color:var(--muted)}
+.theme .theme-t{font-size:19px;font-weight:800;line-height:1.35;margin-top:6px;letter-spacing:-.01em}
+.theme .theme-b{font-size:14px;line-height:1.65;color:var(--muted);margin:8px 0 0}
+.theme .theme-h{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.theme .theme-go{margin-top:18px;padding:13px 18px;background:var(--ink);color:#fff;font-size:15px}
+.theme .theme-go:active{transform:scale(.985)}
+a.btn{text-decoration:none}

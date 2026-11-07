@@ -125,7 +125,13 @@ Views.today = {
               `<a class="btn sm ${s.done ? "ghost" : "line"}" style="--c:${LINE[s.key]}" href="${s.href}" ${s.act ? `data-act="${s.act}"` : ""}>${s.cta}</a>`}
           </div>`).join("")}
       </div>
-      <div class="panel" style="margin-top:14px"><div class="small muted">今天的主题</div><div class="t" style="font-weight:700;margin-top:2px">${esc(((SCENES.find(x => x.key === t.scene) || {}).name || t.title))} · ${esc(t.title)}</div><p class="small muted" style="margin-top:4px">${esc(t.brief)}</p><p class="small" style="margin-top:6px">${(t.hints || []).map(h => `<span class="chip">${esc(h)}</span>`).join(" ")}</p><a class="link" href="#speak" data-act="today-topic">开始练这个话题</a></div>
+      <div class="panel theme" style="margin-top:16px">
+        <div class="theme-k">今天的主题</div>
+        <div class="theme-t">${esc(((SCENES.find(x => x.key === t.scene) || {}).name || t.title))} · ${esc(t.title)}</div>
+        <p class="theme-b">${esc(t.brief)}</p>
+        <div class="theme-h">${(t.hints || []).map(h => `<span class="chip">${esc(h)}</span>`).join("")}</div>
+        <a class="btn block theme-go" href="#speak" data-act="today-topic">开始练这个话题</a>
+      </div>
       <div class="stats">
         <div class="stat"><b>${SRS.learnedCount()}</b><span>学过的句子</span></div>
         <div class="stat"><b>${Log.activeDays()}</b><span>练习天数</span></div>
@@ -822,14 +828,14 @@ Views.speak = {
           <button class="mic" id="sp-mic" aria-label="语音输入">${ICON.mic}</button>
         </div>
         <div id="sp-eval"></div>
-        <button class="btn line block" style="--c:var(--green);margin-top:10px;padding:13px" id="sp-send">${hasKey ? "改成地道说法" : "复制，去 AI 聊天里批改"}</button>
-        ${hasKey ? "" : `<p class="small muted" style="margin-top:8px">在「我的 → AI 批改」里填上 DeepSeek 或 Claude 的密钥，就能直接在这里批改，并且接着对话。</p>`}
+        ${hasKey ? `<button class="btn block" style="--c:var(--green);background:var(--green);color:#fff;margin-top:12px;padding:13px" id="sp-send">改成地道说法</button>` : ""}
+        ${hasKey ? "" : `<p class="small muted" style="margin-top:10px;line-height:1.6">填上密钥后，这里会直接给出地道说法、逐句解释和打分，还能接着对话。密钥在「我的 → AI 批改」里填。</p>`}
         <p class="err" id="sp-err" hidden></p>
       </div>`;
     $("#sp-back").onclick = () => { stopActiveListen(); Speak.topic = null; Speak.custom = null; Speak.turns = []; this.renderList(); };
     $$("#v-speak [data-say]").forEach(b => b.onclick = () => Speech.say(b.dataset.say));
     $("#sp-mic").onclick = () => this.toggleMic();
-    $("#sp-send").onclick = () => this.send();
+    const _sendBtn = $("#sp-send"); if(_sendBtn) _sendBtn.onclick = () => this.send();
     this.renderThread();
   },
   renderThread(){
@@ -902,7 +908,7 @@ Views.speak = {
     }
     if(Speak.busy) return;
     Speak.busy = true;
-    const btn = $("#sp-send"); btn.disabled = true;
+    const btn = $("#sp-send"); if(btn) btn.disabled = true;
     Speak.turns.push({ who: "pending", said });
     this.renderThread(); input.value = "";
     try{
@@ -1846,7 +1852,7 @@ function route(){
   Speech.stop(); stopActiveListen(); clearInterval(Listen.timer);
   if(Listen.state === "hf" && v !== "listen") Views.listen.stopHF();
   if(Link.recording){ Link.recording = false; clearInterval(Link.recTimer); try{ Link.recorder && Link.recorder.stop(); }catch(_){} Link.stream && Link.stream.getTracks().forEach(t => t.stop()); }
-  ROUTES.forEach(x => $("#v-" + x).hidden = x !== v);
+  ROUTES.forEach(x => { const el = $("#v-" + x); if(el) el.hidden = x !== v; });
   const tab = ["review", "library", "words"].includes(v) ? "today" : v;
   $$(".tabs a").forEach(a => a.classList.toggle("on", a.dataset.tab === tab));
   const mb = $(".me-btn"); if(mb) mb.classList.toggle("on", tab === "me");
