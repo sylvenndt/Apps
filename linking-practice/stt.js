@@ -5,7 +5,9 @@
    ② 手机上识别：App 自己用麦克风录音，再用开源 Whisper 模型（transformers.js）在手机上转成文字。
       不联网、不依赖 Google 或 Siri，任何能录音的浏览器都能用；模型第一次使用时下载一次。
    「自动」模式下，系统识别用不了时会自动改用手机上识别。 */
-const IS_STANDALONE = (() => { try{ return matchMedia("(display-mode: standalone)").matches || navigator.standalone === true; }catch(_){ return false; } })();
+/* 装成 App 打开：主屏幕图标（standalone）或者我们的 APK 壳（?app=1） */
+const IS_APP = /[?&]app=1/.test(location.search);
+const IS_STANDALONE = IS_APP || (() => { try{ return matchMedia("(display-mode: standalone)").matches || navigator.standalone === true; }catch(_){ return false; } })();
 const STT_MODELS = {
   small: { id: "onnx-community/distil-small.en", mb: 172, name: "标准", desc: "约 172MB，识别又快又准，普通句子很少认错（推荐）" },
   base: { id: "onnx-community/whisper-base.en", mb: 73, name: "省流量", desc: "约 73MB，下载和识别都最快，口音重时容易认错" },
