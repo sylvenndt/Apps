@@ -39,7 +39,7 @@ jobs:
           curl -fL --retry 3 -o $M/face_landmarker.task https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task
           curl -fL --retry 3 -o $M/realesrgan_general_x4v3.tflite https://huggingface.co/qualcomm/Real-ESRGAN-General-x4v3/resolve/a6187b71ae917c51ec0c957eae66ff0bdac92508/Real-ESRGAN-General-x4v3.tflite
           curl -fL --retry 3 -o $M/realesrgan_x4plus.tflite https://huggingface.co/qualcomm/Real-ESRGAN-x4plus/resolve/d1464ff1d56afc8ab662b3933a9cd866968ee21e/Real-ESRGAN-x4plus.tflite
-          curl -fL --retry 3 -o $M/lama_dilated.tflite https://huggingface.co/qualcomm/LaMa-Dilated/resolve/main/LaMa-Dilated.tflite
+          curl -fL --retry 3 -o $M/lama_dilated.tflite https://huggingface.co/qualcomm/LaMa-Dilated/resolve/765dbb9f5406651bf84f90f72dd869d3121c50d2/LaMa-Dilated.tflite
           ls -la $M
 
       - name: 编译 APK
