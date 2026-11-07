@@ -58,6 +58,7 @@ private fun bi(label: String, get: (EditParams) -> Float, set: (EditParams, Floa
 
 enum class Tool(val label: String) {
     AUTO("一键美化"),
+    AI("AI 调参"),
     FILTER("滤镜"),
     PORTRAIT("人像"),
     FACE("五官"),
@@ -69,7 +70,7 @@ enum class Tool(val label: String) {
 
     val sliders: List<SliderSpec>
         get() = when (this) {
-            AUTO, FILTER -> emptyList()
+            AUTO, AI, FILTER -> emptyList()
             PORTRAIT -> listOf(
                 pos("磨皮", { it.smooth }, { p, v -> p.copy(smooth = v) }),
                 pos("肤色均匀", { it.even }, { p, v -> p.copy(even = v) }),

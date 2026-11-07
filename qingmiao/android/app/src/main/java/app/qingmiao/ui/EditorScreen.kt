@@ -22,6 +22,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -66,6 +73,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import app.qingmiao.AiTuner
 import app.qingmiao.Analyzer
 import app.qingmiao.EditParams
 import app.qingmiao.Filters
@@ -102,6 +110,11 @@ fun EditorScreen(uri: Uri, onBack: () -> Unit) {
     var thumbs by remember { mutableStateOf<Map<String, Bitmap>>(emptyMap()) }
     val filters = remember { Filters.list(context) }
     var hasSeg by remember { mutableStateOf(false) }
+    var stats by remember { mutableStateOf("") }
+    var hasKey by remember { mutableStateOf(AiTuner.apiKey(context).isNotBlank()) }
+    var upload by remember { mutableStateOf(AiTuner.uploadPhoto(context)) }
+    var aiBusy by remember { mutableStateOf(false) }
+    var aiReply by remember { mutableStateOf<String?>(null) }
     var faceCount by remember { mutableStateOf(0) }
 
     /** 只改预览（拖动中）。 */
@@ -168,6 +181,7 @@ fun EditorScreen(uri: Uri, onBack: () -> Unit) {
             faceCount = vision?.faceCount ?: (a.faces.size / 8)
             engine.setImage(d.bitmap, d.fullWidth, d.fullHeight, a.faces, vision)
             auto = a.params
+            stats = a.stats
             commit(a.params) // 打开就是一键美化
             loaded = true
             thumbs = withContext(Dispatchers.IO) {
@@ -187,6 +201,26 @@ fun EditorScreen(uri: Uri, onBack: () -> Unit) {
         } else {
             val lut = withContext(Dispatchers.IO) { runCatching { Filters.loadLut(context, id) }.getOrNull() }
             engine.setLut(lut)
+        }
+    }
+
+    fun askAi(text: String) {
+        if (aiBusy || text.isBlank()) return
+        aiBusy = true
+        aiReply = if (upload) "正在上传照片给 AI 看…" else "AI 正在想…"
+        val current = params
+        val photo = if (upload) preview else null
+        scope.launch {
+            val r = withContext(Dispatchers.IO) {
+                runCatching { AiTuner.ask(context, text, current, stats, photo) }
+            }
+            aiBusy = false
+            r.onSuccess {
+                commit(it.params)
+                aiReply = "AI：" + it.say
+            }.onFailure { e ->
+                aiReply = "出错了：" + (e.message ?: e.javaClass.simpleName)
+            }
         }
     }
 
@@ -223,6 +257,7 @@ fun EditorScreen(uri: Uri, onBack: () -> Unit) {
             Modifier
                 .fillMaxSize()
                 .systemBarsPadding()
+                .imePadding()
         ) {
             // 顶栏
             Row(
@@ -322,6 +357,21 @@ fun EditorScreen(uri: Uri, onBack: () -> Unit) {
                             onAuto = { commit(auto) },
                             onReset = { commit(EditParams()) },
                         )
+                        Tool.AI -> AiPanel(
+                            hasKey = hasKey,
+                            upload = upload,
+                            busy = aiBusy,
+                            reply = aiReply,
+                            onSaveKey = { k ->
+                                AiTuner.setApiKey(context, k)
+                                hasKey = k.isNotBlank()
+                            },
+                            onUpload = { on ->
+                                upload = on
+                                AiTuner.setUploadPhoto(context, on)
+                            },
+                            onAsk = { askAi(it) },
+                        )
                         Tool.FILTER -> FilterPanel(
                             filters = filters,
                             thumbs = thumbs,
@@ -409,6 +459,115 @@ private fun AutoPanel(params: EditParams, auto: EditParams, onAuto: () -> Unit, 
         }
         Spacer(Modifier.height(12.dp))
         Text("长按照片看原图 · 点滑杆右边的数字可以归零", color = QmColors.Muted, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun AiPanel(
+    hasKey: Boolean,
+    upload: Boolean,
+    busy: Boolean,
+    reply: String?,
+    onSaveKey: (String) -> Unit,
+    onUpload: (Boolean) -> Unit,
+    onAsk: (String) -> Unit,
+) {
+    var text by remember { mutableStateOf("") }
+    var keyInput by remember { mutableStateOf("") }
+    var editingKey by remember { mutableStateOf(!hasKey) }
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 14.dp, vertical = 2.dp)
+    ) {
+        if (editingKey) {
+            Text("填入你的 DeepSeek API Key（platform.deepseek.com 里创建）", color = QmColors.Muted, fontSize = 12.sp)
+            Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = keyInput,
+                    onValueChange = { keyInput = it },
+                    singleLine = true,
+                    placeholder = { Text("sk-…", fontSize = 13.sp) },
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(8.dp))
+                Button(
+                    onClick = {
+                        onSaveKey(keyInput)
+                        if (keyInput.isNotBlank()) editingKey = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = QmColors.Primary, contentColor = QmColors.OnPrimary),
+                ) { Text("保存") }
+            }
+        } else {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                singleLine = true,
+                enabled = !busy,
+                placeholder = { Text("说一句：太黄了 / 皮肤再好一点", fontSize = 13.sp) },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                keyboardActions = KeyboardActions(onSend = { onAsk(text) }),
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(8.dp))
+            Button(
+                onClick = { onAsk(text) },
+                enabled = !busy && text.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(containerColor = QmColors.Primary, contentColor = QmColors.OnPrimary),
+            ) { Text(if (busy) "…" else "发送") }
+        }
+        Row(
+            Modifier
+                .horizontalScroll(rememberScrollState())
+                .padding(vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            for (q in listOf("太黄了", "皮肤再好一点", "白一点但别假", "更通透", "日系清新", "背景虚化", "夜景提亮", "复古胶片")) {
+                Text(
+                    q,
+                    color = QmColors.Ink,
+                    fontSize = 13.sp,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(QmColors.PanelHigh)
+                        .clickable(enabled = !busy) {
+                            text = q
+                            onAsk(q)
+                        }
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                )
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(
+                checked = upload,
+                onCheckedChange = onUpload,
+                colors = SwitchDefaults.colors(checkedTrackColor = QmColors.Primary),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                if (upload) "上传照片给 AI 看（更准，会联网发送一张缩略图）" else "不上传照片，只发文字和亮度统计",
+                color = QmColors.Muted,
+                fontSize = 12.sp,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                "换 Key",
+                color = QmColors.Muted,
+                fontSize = 12.sp,
+                modifier = Modifier
+                    .clickable { editingKey = true }
+                    .padding(6.dp),
+            )
+        }
+        if (reply != null) {
+            Text(reply, color = QmColors.Ink, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp))
+        }
+        }
     }
 }
 

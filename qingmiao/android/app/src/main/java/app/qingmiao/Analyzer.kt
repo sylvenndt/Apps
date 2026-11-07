@@ -18,7 +18,7 @@ import kotlin.math.sqrt
 object Analyzer {
 
     /** faces：人脸与脖子的椭圆 (cx, cy, rx, ry)×n，归一化坐标，y 向下。 */
-    class Result(val params: EditParams, val skinRatio: Float, val faces: FloatArray)
+    class Result(val params: EditParams, val skinRatio: Float, val faces: FloatArray, val stats: String)
 
     fun analyze(bitmap: Bitmap, vision: Vision.Maps? = null): Result {
         // 优先用 AI 关键点定位的人脸；没有就退回系统自带的人脸检测
@@ -120,7 +120,15 @@ object Analyzer {
             clarity = if (portrait) 12f else 25f,
             sharpen = if (portrait) 20f else 30f,
         )
-        return Result(params, skinRatio, faces)
+        val stats = buildString {
+            append("尺寸 ${bitmap.width}x${bitmap.height}；")
+            append("中间调亮度 ${"%.2f".format(median)}（0 黑 1 白），")
+            append("亮部 98% 分位 ${"%.2f".format(p98)}，暗部 10% 分位 ${"%.2f".format(p10)}；")
+            append("对比跨度 ${"%.2f".format(spread)}；")
+            append("偏色估计：色温 ${temperature.roundToInt()}、色调 ${tint.roundToInt()}（为纠正一半偏色建议的值）；")
+            append("人脸 ${faces.size / 8} 张，肤色像素占比 ${(skinRatio * 100).roundToInt()}%")
+        }
+        return Result(params, skinRatio, faces, stats)
     }
 
     /**

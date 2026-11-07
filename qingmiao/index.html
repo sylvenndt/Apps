@@ -38,8 +38,8 @@
     <div class="ver" id="ver">安卓安装包</div>
   </div>
 
-  <a class="btn" id="dl" href="qingmiao.apk" download>下载安装包（安卓）</a>
-  <a class="alt" href="https://github.com/sylvenndt/Apps/releases/tag/qingmiao-latest">下载慢？换 GitHub 下载</a>
+  <a class="btn" id="dl" href="https://github.com/sylvenndt/Apps/releases/download/qingmiao-latest/qingmiao.apk">下载安装包（安卓）</a>
+  <a class="alt" href="https://github.com/sylvenndt/Apps/releases/tag/qingmiao-latest">打不开？去 GitHub 发布页下载</a>
 
   <div class="card">
     <h2>怎么安装</h2>
@@ -53,17 +53,18 @@
   <div class="card">
     <h2>v1 能做什么</h2>
     <ul>
-      <li>导入 HEIC / JPEG / PNG，也可以在相册里「分享」或「编辑」到轻描</li>
-      <li>一键美化（默认就是保守档，什么都不调也能直接发）</li>
-      <li>磨皮、肤色均匀、肤色提亮：只动皮肤，毛孔和痣都留着</li>
-      <li>亮度、对比、色温、色调、清晰度</li>
-      <li>长按照片看原图；按原图分辨率保存，保留拍摄信息、去掉位置</li>
+      <li>一键美化：按光线、肤色、五官自动调好</li>
+      <li>本地 AI 识别皮肤、头发、背景和五官：磨皮、肤色均匀、美白、气色、亮眼、白牙、唇色、去黑眼圈</li>
+      <li>背景虚化、背景压暗</li>
+      <li>光影、色彩、细节、效果共 15 项调节，24 个滤镜</li>
+      <li>AI 调参：说一句话（可上传照片给 DeepSeek 看）自动调</li>
+      <li>撤销重做，长按看原图，按原图分辨率保存</li>
     </ul>
   </div>
 
   <div class="card">
     <h2>隐私</h2>
-    <p class="muted" style="margin:0">轻描不申请联网权限，也不读你的整个相册。照片只在这台手机上处理，保存到「相册 › 轻描」。</p>
+    <p class="muted" style="margin:0">修图都在手机上完成。只有你用「AI 调参」并打开上传时，才会把一张缩略图发给 DeepSeek。轻描不读你的整个相册，保存到「相册 › 轻描」。</p>
   </div>
 </main>
 <script>
@@ -71,7 +72,7 @@ fetch("version.json?t=" + Date.now()).then(r => r.ok ? r.json() : null).then(v =
   if (!v) { document.getElementById("ver").textContent = "安装包正在打包中，稍后刷新"; return; }
   const mb = (v.size / 1048576).toFixed(1);
   document.getElementById("ver").textContent = `版本 ${v.version} · ${mb} MB`;
-  document.getElementById("dl").href = "qingmiao.apk?v=" + encodeURIComponent(v.version);
+  if (v.url) document.getElementById("dl").href = v.url;
 }).catch(() => {});
 </script>
 </body>
