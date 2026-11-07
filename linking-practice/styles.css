@@ -355,3 +355,29 @@ button:active,.btn:active,.chip:active,.opt:active:not(:disabled),.tile:active,.
 .theme .theme-go{margin-top:18px;padding:13px 18px;background:var(--ink);color:#fff;font-size:15px}
 .theme .theme-go:active{transform:scale(.985)}
 a.btn{text-decoration:none}
+/* ===== 控件统一（v35）：主按钮 / 次按钮 / 芯片 ===== */
+.btn{
+  min-height:46px;padding:0 22px;border-radius:14px;
+  font-size:15px;font-weight:700;letter-spacing:.01em;line-height:1;
+  transition:transform .14s ease,background .16s ease,box-shadow .16s ease,opacity .16s ease;
+  box-shadow:0 1px 2px rgba(18,20,24,.05),0 6px 16px -10px rgba(18,20,24,.35);
+}
+.btn:active{transform:scale(.972)}
+.btn:disabled{transform:none}
+.btn.ghost{box-shadow:none;border:1.5px solid var(--rule);background:transparent;color:var(--ink)}
+.btn.ghost:active{background:var(--sunk)}
+.btn.soft{box-shadow:none;background:var(--sunk);color:var(--ink)}
+.btn.soft:active{background:var(--rule)}
+.btn.sm{min-height:36px;padding:0 15px;border-radius:11px;font-size:14px}
+.btn.line{box-shadow:0 6px 16px -12px var(--c)}
+.chip{
+  min-height:34px;padding:0 14px;border-radius:11px;
+  font-size:13.5px;font-weight:600;line-height:1;
+  transition:transform .14s ease,background .16s ease,border-color .16s ease,color .16s ease;
+}
+.chip:active{transform:scale(.962)}
+.chip.on{box-shadow:0 1px 2px rgba(18,20,24,.06)}
+.icon-btn{transition:transform .14s ease,background .16s ease}
+.icon-btn:active{transform:scale(.94)}
+.me-btn:focus-visible,.btn:focus-visible,.chip:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+@media (prefers-reduced-motion:reduce){.btn,.chip,.icon-btn,.me-btn{transition:none}.btn:active,.chip:active{transform:none}}

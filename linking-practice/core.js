@@ -1,5 +1,5 @@
 "use strict";
-const APP_VERSION = 34; // 跟 index.html 的 ?v= 和 sw.js 的版本一起改
+const APP_VERSION = 35; // 跟 index.html 的 ?v= 和 sw.js 的版本一起改
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
