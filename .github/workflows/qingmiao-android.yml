@@ -1,0 +1,57 @@
+name: 轻描 Android 打包
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'qingmiao/android/**'
+      - '.github/workflows/qingmiao-android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+
+concurrency:
+  group: qingmiao-android
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+          cache-dependency-path: |
+            qingmiao/android/**/*.gradle.kts
+            qingmiao/android/gradle/wrapper/gradle-wrapper.properties
+
+      - name: 编译 APK
+        working-directory: qingmiao/android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace assembleRelease
+
+      - name: 发布到下载页
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.run_number }}
+        run: |
+          cp qingmiao/android/app/build/outputs/apk/release/app-release.apk qingmiao/qingmiao.apk
+          SIZE=$(stat -c%s qingmiao/qingmiao.apk)
+          echo "{\"version\":\"0.1.$RUN\",\"built\":\"$(date -u +%Y-%m-%dT%H:%MZ)\",\"size\":$SIZE}" > qingmiao/version.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add qingmiao/qingmiao.apk qingmiao/version.json
+          git commit -m "轻描：自动打包 v0.1.$RUN"
+          git pull --rebase origin main
+          git push origin HEAD:main
+          gh api -X POST "repos/${{ github.repository }}/pages/builds" >/dev/null || true
+          gh release delete qingmiao-latest --yes --cleanup-tag || true
+          gh release create qingmiao-latest qingmiao/qingmiao.apk \
+            --title "轻描 v0.1.$RUN" --notes "轻描安卓安装包（自动构建）。下载页：https://sylvenndt.github.io/Apps/qingmiao/"
