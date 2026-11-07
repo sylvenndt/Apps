@@ -1,8 +1,8 @@
 /* 离线缓存：版本化的文件直接用缓存（秒开），页面本身联网最多等 2.5 秒，
    超时就先用缓存版本。顺便给页面加上跨源隔离头，让 AI 语音可以多核运算。
    录好的语音（audio/*.ogg）单独存在 fluent-audio-v1 里，App 更新时不会被清掉。 */
-const CACHE = "daily-english-v20";
-const V = "?v=20";
+const CACHE = "daily-english-v21";
+const V = "?v=21";
 const AUDIO_CACHE = "fluent-audio-v1";
 const CORE = ["./", "index.html", "styles.css" + V, "data.js" + V, "emotion.js" + V, "words.js" + V, "vocab.js" + V, "linking.js" + V, "core.js" + V, "ai.js" + V, "replies_zh.js" + V, "neural.js" + V, "stt.js" + V, "pron.js" + V, "app.js" + V, "manifest.json", "icon-192.png", "icon-512.png", "icon-180.png"];
 
@@ -33,14 +33,13 @@ self.addEventListener("fetch", e => {
   if(req.mode === "navigate"){
     e.respondWith((async () => {
       const cache = await caches.open(CACHE);
-      // 页面本身每次都向服务器确认有没有更新（不用浏览器缓存里的旧页面）
-      const net = fetch(url.href.split("#")[0], { cache: "no-cache", credentials: "same-origin" }).then(r => { if(r.ok) cache.put("index.html", r.clone()); return r; });
-      try{ return isolate(await Promise.race([net, timeout(2500)])); }
-      catch(_){
-        const hit = await cache.match("index.html") || await cache.match("./");
-        if(hit) return isolate(hit);
-        return isolate(await net);
-      }
+      // 有缓存就直接给（打开是秒开的，不用先等网络）。
+      // 新版本由 sw.js 自己的更新流程装好，装好后页面顶部会出现「点这里马上换上」。
+      const hit = await cache.match("index.html") || await cache.match("./");
+      if(hit) return isolate(hit);
+      const r = await fetch(url.href.split("#")[0], { cache: "no-cache", credentials: "same-origin" });
+      if(r.ok) cache.put("index.html", r.clone());
+      return isolate(r);
     })());
     return;
   }

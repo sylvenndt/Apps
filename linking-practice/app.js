@@ -1833,6 +1833,11 @@ document.addEventListener("click", e => {
 });
 window.addEventListener("hashchange", route);
 route();
+/* 第一屏画出来之后，撤掉 index.html 里的启动画面 */
+try{
+  const boot = document.getElementById("boot");
+  if(boot) requestAnimationFrame(() => { boot.classList.add("out"); setTimeout(() => boot.remove(), 320); });
+}catch(_){}
 /* 新版本：每次打开、每次切回 App 都检查一次；新版本装好后在顶部提示，点一下就换上 */
 if("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")){
   const hadController = !!navigator.serviceWorker.controller;
