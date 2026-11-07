@@ -78,4 +78,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
     implementation("com.google.mediapipe:tasks-vision:0.10.20")
+    implementation("com.google.ai.edge.litert:litert:1.4.0")
+    implementation("com.google.ai.edge.litert:litert-gpu:1.4.0")
+    implementation("com.google.ai.edge.litert:litert-gpu-api:1.4.0")
 }

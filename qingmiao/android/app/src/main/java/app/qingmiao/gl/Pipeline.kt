@@ -134,7 +134,7 @@ class Pipeline {
         val w = fullBitmap.width
         val h = fullBitmap.height
         val tex = uploadTexture(fullBitmap)
-        fullBitmap.recycle()
+        fullBitmap.recycle() // 调用方传进来的是专门给导出用的副本
         val out = ByteBuffer.allocateDirect(w * h * 4)
         val tile = 1024
         val target = RenderTarget.rgba8(min(tile, w), min(tile, h), GLES30.GL_NEAREST)

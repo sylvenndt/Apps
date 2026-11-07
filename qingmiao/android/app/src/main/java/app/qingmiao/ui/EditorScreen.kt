@@ -75,6 +75,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.qingmiao.AiTuner
 import app.qingmiao.Analyzer
+import app.qingmiao.Enhancer
 import app.qingmiao.EditParams
 import app.qingmiao.Filters
 import app.qingmiao.ImageIO
@@ -86,6 +87,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -115,6 +117,13 @@ fun EditorScreen(uri: Uri, onBack: () -> Unit) {
     var upload by remember { mutableStateOf(AiTuner.uploadPhoto(context)) }
     var aiBusy by remember { mutableStateOf(false) }
     var aiReply by remember { mutableStateOf<String?>(null) }
+    var enhanced by remember { mutableStateOf<Bitmap?>(null) }
+    var enhanceLabel by remember { mutableStateOf<String?>(null) }
+    var enhBusy by remember { mutableStateOf(false) }
+    var enhProgress by remember { mutableFloatStateOf(0f) }
+    var origW by remember { mutableStateOf(0) }
+    var origH by remember { mutableStateOf(0) }
+    var origMime by remember { mutableStateOf("image/jpeg") }
     var faceCount by remember { mutableStateOf(0) }
 
     /** 只改预览（拖动中）。 */
@@ -177,6 +186,9 @@ fun EditorScreen(uri: Uri, onBack: () -> Unit) {
         }
         result.onSuccess { (d, a, vision) ->
             preview = d.bitmap
+            origW = d.fullWidth
+            origH = d.fullHeight
+            origMime = d.mime
             hasSeg = vision?.hasSeg == true
             faceCount = vision?.faceCount ?: (a.faces.size / 8)
             engine.setImage(d.bitmap, d.fullWidth, d.fullHeight, a.faces, vision)
@@ -201,6 +213,52 @@ fun EditorScreen(uri: Uri, onBack: () -> Unit) {
         } else {
             val lut = withContext(Dispatchers.IO) { runCatching { Filters.loadLut(context, id) }.getOrNull() }
             engine.setLut(lut)
+        }
+    }
+
+    /** 换工作底图（画质增强之后，或恢复原图）。参数保留。 */
+    fun useWorking(w: Working) {
+        preview = w.preview
+        hasSeg = w.vision?.hasSeg == true
+        faceCount = w.vision?.faceCount ?: (w.analysis.faces.size / 8)
+        stats = w.analysis.stats
+        engine.setImage(w.preview, w.fullW, w.fullH, w.analysis.faces, w.vision)
+        engine.update(params)
+    }
+
+    fun enhance(mode: Enhancer.Mode?) {
+        if (enhBusy) return
+        enhBusy = true
+        enhProgress = 0f
+        scope.launch {
+            val r = withContext(Dispatchers.IO) {
+                runCatching {
+                    if (mode == null) {
+                        val d = ImageIO.decode(context, uri, min(ImageIO.PREVIEW_LONG, engine.maxTextureSize))
+                        val v = Vision.analyze(context, d.bitmap)
+                        null to Working(d.bitmap, d.fullWidth, d.fullHeight, v, Analyzer.analyze(d.bitmap, v))
+                    } else {
+                        val base = ImageIO.decode(context, uri, 4096).bitmap
+                        val out = Enhancer.run(context, base, mode) { f -> main.post { enhProgress = 0.9f * f } }
+                        base.recycle()
+                        val k = min(1f, ImageIO.PREVIEW_LONG.toFloat() / max(out.width, out.height))
+                        val pv = Bitmap.createScaledBitmap(
+                            out, max(1, (out.width * k).roundToInt()), max(1, (out.height * k).roundToInt()), true,
+                        )
+                        val v = Vision.analyze(context, pv)
+                        out to Working(pv, out.width, out.height, v, Analyzer.analyze(pv, v))
+                    }
+                }
+            }
+            enhBusy = false
+            r.onSuccess { (full, w) ->
+                enhanced = full
+                enhanceLabel = mode?.label
+                useWorking(w)
+                if (mode != null) Toast.makeText(context, "${mode.label}完成：${w.fullW}×${w.fullH}", Toast.LENGTH_SHORT).show()
+            }.onFailure { e ->
+                Toast.makeText(context, "增强失败：${e.message ?: e.javaClass.simpleName}", Toast.LENGTH_LONG).show()
+            }
         }
     }
 
@@ -232,7 +290,12 @@ fun EditorScreen(uri: Uri, onBack: () -> Unit) {
         scope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    val full = ImageIO.decode(context, uri, engine.maxTextureSize)
+                    val enh = enhanced
+                    val full = if (enh != null) {
+                        ImageIO.Decoded(enh.copy(Bitmap.Config.ARGB_8888, false), enh.width, enh.height, origMime)
+                    } else {
+                        ImageIO.decode(context, uri, engine.maxTextureSize)
+                    }
                     val bmp = full.bitmap
                     val w = bmp.width
                     val h = bmp.height
@@ -372,6 +435,15 @@ fun EditorScreen(uri: Uri, onBack: () -> Unit) {
                             },
                             onAsk = { askAi(it) },
                         )
+                        Tool.ENHANCE -> EnhancePanel(
+                            width = origW,
+                            height = origH,
+                            busy = enhBusy,
+                            progress = enhProgress,
+                            current = enhanceLabel,
+                            onRun = { enhance(it) },
+                            onRestore = { enhance(null) },
+                        )
                         Tool.FILTER -> FilterPanel(
                             filters = filters,
                             thumbs = thumbs,
@@ -459,6 +531,75 @@ private fun AutoPanel(params: EditParams, auto: EditParams, onAuto: () -> Unit, 
         }
         Spacer(Modifier.height(12.dp))
         Text("长按照片看原图 · 点滑杆右边的数字可以归零", color = QmColors.Muted, fontSize = 12.sp)
+    }
+}
+
+private class Working(
+    val preview: Bitmap,
+    val fullW: Int,
+    val fullH: Int,
+    val vision: Vision.Maps?,
+    val analysis: Analyzer.Result,
+)
+
+@Composable
+private fun EnhancePanel(
+    width: Int,
+    height: Int,
+    busy: Boolean,
+    progress: Float,
+    current: String?,
+    onRun: (Enhancer.Mode) -> Unit,
+    onRestore: () -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+    ) {
+        if (busy) {
+            Text("AI 正在逐块处理，全程在手机上…", color = QmColors.Ink, fontSize = 14.sp)
+            Spacer(Modifier.height(12.dp))
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier.fillMaxWidth(),
+                color = QmColors.Primary,
+                trackColor = QmColors.Track,
+            )
+        } else {
+        if (current != null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("已应用：$current", color = QmColors.Primary, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                TextButton(onClick = onRestore) { Text("恢复原图画质", color = QmColors.Ink, fontSize = 13.sp) }
+            }
+        } else {
+            Text("给本来就不清楚的图用：微信图、截图、老照片", color = QmColors.Muted, fontSize = 12.sp)
+        }
+        for (m in Enhancer.Mode.entries) {
+            val ok = Enhancer.available(m, width, height)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(QmColors.PanelHigh)
+                    .clickable(enabled = ok) { onRun(m) }
+                    .padding(horizontal = 14.dp, vertical = 9.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(m.label, color = if (ok) QmColors.Ink else QmColors.Track, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (ok) m.desc else "这张图已经够大（${width}×${height}），不需要",
+                        color = QmColors.Muted,
+                        fontSize = 12.sp,
+                    )
+                }
+                if (ok) Text("开始", color = QmColors.Primary, fontSize = 14.sp)
+            }
+        }
+        }
     }
 }
 

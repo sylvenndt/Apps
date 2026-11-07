@@ -12,3 +12,6 @@
 -dontwarn com.google.android.datatransport.**
 -dontwarn org.checkerframework.**
 -dontwarn com.google.errorprone.annotations.**
+# LiteRT / TFLite：原生层回调 Java
+-keep class org.tensorflow.lite.** { *; }
+-dontwarn org.tensorflow.lite.**

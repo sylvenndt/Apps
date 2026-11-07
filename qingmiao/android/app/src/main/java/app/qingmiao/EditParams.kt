@@ -63,6 +63,7 @@ enum class Tool(val label: String) {
     PORTRAIT("人像"),
     FACE("五官"),
     BACKGROUND("背景"),
+    ENHANCE("画质"),
     LIGHT("光影"),
     COLOR("色彩"),
     DETAIL("细节"),
@@ -70,7 +71,7 @@ enum class Tool(val label: String) {
 
     val sliders: List<SliderSpec>
         get() = when (this) {
-            AUTO, AI, FILTER -> emptyList()
+            AUTO, AI, FILTER, ENHANCE -> emptyList()
             PORTRAIT -> listOf(
                 pos("磨皮", { it.smooth }, { p, v -> p.copy(smooth = v) }),
                 pos("肤色均匀", { it.even }, { p, v -> p.copy(even = v) }),
