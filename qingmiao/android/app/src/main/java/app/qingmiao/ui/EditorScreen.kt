@@ -7,7 +7,9 @@ import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -60,6 +62,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke as DrawStroke
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
@@ -79,6 +88,7 @@ import app.qingmiao.Enhancer
 import app.qingmiao.EditParams
 import app.qingmiao.Filters
 import app.qingmiao.ImageIO
+import app.qingmiao.Inpainter
 import app.qingmiao.SliderSpec
 import app.qingmiao.Tool
 import app.qingmiao.Vision
@@ -124,6 +134,27 @@ fun EditorScreen(uri: Uri, onBack: () -> Unit) {
     var origW by remember { mutableStateOf(0) }
     var origH by remember { mutableStateOf(0) }
     var origMime by remember { mutableStateOf("image/jpeg") }
+    val strokes = remember { mutableStateListOf<Inpainter.Stroke>() }
+    val drawing = remember { mutableStateListOf<Offset>() }
+    var brush by remember { mutableFloatStateOf(0.06f) }
+    var boxSize by remember { mutableStateOf(IntSize.Zero) }
+    var eraseBusy by remember { mutableStateOf(false) }
+
+    /** 预览框里照片实际显示的区域（等比放进去，四周留边）：left, top, width, height。 */
+    fun displayRect(): FloatArray? {
+        val pv = preview ?: return null
+        if (boxSize.width == 0 || boxSize.height == 0) return null
+        val ar = pv.width.toFloat() / pv.height
+        val bw = boxSize.width.toFloat()
+        val bh = boxSize.height.toFloat()
+        return if (ar > bw / bh) floatArrayOf(0f, (bh - bw / ar) / 2f, bw, bw / ar)
+        else floatArrayOf((bw - bh * ar) / 2f, 0f, bh * ar, bh)
+    }
+
+    fun toImage(o: Offset): Offset? {
+        val r = displayRect() ?: return null
+        return Offset(((o.x - r[0]) / r[2]).coerceIn(0f, 1f), ((o.y - r[1]) / r[3]).coerceIn(0f, 1f))
+    }
     var faceCount by remember { mutableStateOf(0) }
 
     /** 只改预览（拖动中）。 */
@@ -262,6 +293,37 @@ fun EditorScreen(uri: Uri, onBack: () -> Unit) {
         }
     }
 
+    fun erase() {
+        if (eraseBusy || strokes.isEmpty()) return
+        eraseBusy = true
+        val list = strokes.toList()
+        scope.launch {
+            val r = withContext(Dispatchers.IO) {
+                runCatching {
+                    val base = enhanced?.copy(Bitmap.Config.ARGB_8888, false)
+                        ?: ImageIO.decode(context, uri, engine.maxTextureSize).bitmap
+                    val out = Inpainter.run(context, base, list)
+                    base.recycle()
+                    val k = min(1f, ImageIO.PREVIEW_LONG.toFloat() / max(out.width, out.height))
+                    val pv = Bitmap.createScaledBitmap(
+                        out, max(1, (out.width * k).roundToInt()), max(1, (out.height * k).roundToInt()), true,
+                    )
+                    val v = Vision.analyze(context, pv)
+                    out to Working(pv, out.width, out.height, v, Analyzer.analyze(pv, v))
+                }
+            }
+            eraseBusy = false
+            r.onSuccess { (full, w) ->
+                enhanced = full
+                if (enhanceLabel == null) enhanceLabel = "消除笔"
+                strokes.clear()
+                useWorking(w)
+            }.onFailure { e ->
+                Toast.makeText(context, "消除失败：${e.message ?: e.javaClass.simpleName}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     fun askAi(text: String) {
         if (aiBusy || text.isBlank()) return
         aiBusy = true
@@ -364,16 +426,64 @@ fun EditorScreen(uri: Uri, onBack: () -> Unit) {
                 Box(
                     Modifier
                         .fillMaxSize()
-                        .pointerInput(Unit) {
-                            detectTapGestures(onPress = {
-                                val job = scope.launch {
-                                    delay(120)
-                                    showOriginal = true
-                                    engine.setOriginal(true)
-                                }
-                                tryAwaitRelease()
-                                job.cancel()
-                                if (showOriginal) {
+                        .onSizeChanged { boxSize = it }
+                        .pointerInput(tool) {
+                            if (tool == Tool.ERASE) {
+                                detectDragGestures(
+                                    onDragStart = { o ->
+                                        drawing.clear()
+                                        toImage(o)?.let { drawing.add(it) }
+                                    },
+                                    onDrag = { change, _ ->
+                                        toImage(change.position)?.let { drawing.add(it) }
+                                    },
+                                    onDragEnd = {
+                                        if (drawing.isNotEmpty()) {
+                                            strokes.add(Inpainter.Stroke(drawing.map { it.x to it.y }, brush))
+                                        }
+                                        drawing.clear()
+                                    },
+                                )
+                            } else {
+                                detectTapGestures(onPress = {
+                                    val job = scope.launch {
+                                        delay(120)
+                                        showOriginal = true
+                                        engine.setOriginal(true)
+                                    }
+                                    tryAwaitRelease()
+                                    job.cancel()
+                                    if (showOriginal) {
+                                        showOriginal = false
+                                        engine.setOriginal(false)
+                                    }
+                                })
+                            }
+                        }
+                )
+                if (tool == Tool.ERASE) {
+                    Canvas(Modifier.fillMaxSize()) {
+                        val r = displayRect() ?: return@Canvas
+                        val all = strokes.map { it.points to it.width } +
+                            listOf(drawing.map { it.x to it.y } to brush)
+                        for ((pts, wd) in all) {
+                            if (pts.isEmpty()) continue
+                            val path = Path()
+                            pts.forEachIndexed { i, (x, y) ->
+                                val px = r[0] + x * r[2]
+                                val py = r[1] + y * r[3]
+                                if (i == 0) path.moveTo(px, py) else path.lineTo(px, py)
+                            }
+                            if (pts.size == 1) path.lineTo(r[0] + pts[0].first * r[2] + 0.5f, r[1] + pts[0].second * r[3])
+                            drawPath(
+                                path,
+                                color = QmColors.Primary.copy(alpha = 0.5f),
+                                style = DrawStroke(width = wd * r[2], cap = StrokeCap.Round, join = StrokeJoin.Round),
+                            )
+                        }
+                    }
+                }
+                if (showOriginal) {
                                     showOriginal = false
                                     engine.setOriginal(false)
                                 }
@@ -442,6 +552,17 @@ fun EditorScreen(uri: Uri, onBack: () -> Unit) {
                             progress = enhProgress,
                             current = enhanceLabel,
                             onRun = { enhance(it) },
+                            onRestore = { enhance(null) },
+                        )
+                        Tool.ERASE -> ErasePanel(
+                            brush = brush,
+                            onBrush = { brush = it },
+                            count = strokes.size,
+                            busy = eraseBusy,
+                            canRestore = enhanced != null,
+                            onErase = { erase() },
+                            onUndoStroke = { if (strokes.isNotEmpty()) strokes.removeAt(strokes.lastIndex) },
+                            onClear = { strokes.clear() },
                             onRestore = { enhance(null) },
                         )
                         Tool.FILTER -> FilterPanel(
@@ -541,6 +662,67 @@ private class Working(
     val vision: Vision.Maps?,
     val analysis: Analyzer.Result,
 )
+
+@Composable
+private fun ErasePanel(
+    brush: Float,
+    onBrush: (Float) -> Unit,
+    count: Int,
+    busy: Boolean,
+    canRestore: Boolean,
+    onErase: () -> Unit,
+    onUndoStroke: () -> Unit,
+    onClear: () -> Unit,
+    onRestore: () -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 2.dp)
+    ) {
+        Text(
+            if (busy) "AI 正在补背景，全程在手机上…" else "用手指涂掉要消除的路人、杂物、电线，再点「消除」",
+            color = QmColors.Muted,
+            fontSize = 12.sp,
+        )
+        if (busy) {
+            Spacer(Modifier.height(10.dp))
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = QmColors.Primary, trackColor = QmColors.Track)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(46.dp)) {
+            Text("笔粗", color = QmColors.Ink, fontSize = 14.sp, modifier = Modifier.width(48.dp))
+            Slider(
+                value = brush,
+                onValueChange = onBrush,
+                valueRange = 0.015f..0.2f,
+                colors = SliderDefaults.colors(
+                    thumbColor = QmColors.Primary,
+                    activeTrackColor = QmColors.Primary,
+                    inactiveTrackColor = QmColors.Track,
+                ),
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Button(
+                onClick = onErase,
+                enabled = count > 0 && !busy,
+                shape = RoundedCornerShape(22.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = QmColors.Primary, contentColor = QmColors.OnPrimary),
+            ) { Text("消除", fontWeight = FontWeight.SemiBold) }
+            OutlinedButton(onClick = onUndoStroke, enabled = count > 0 && !busy, shape = RoundedCornerShape(22.dp)) {
+                Text("退一笔", color = QmColors.Ink)
+            }
+            OutlinedButton(onClick = onClear, enabled = count > 0 && !busy, shape = RoundedCornerShape(22.dp)) {
+                Text("清空", color = QmColors.Ink)
+            }
+        }
+        if (canRestore && !busy) {
+            TextButton(onClick = onRestore) { Text("恢复原图（撤销所有消除和画质增强）", color = QmColors.Muted, fontSize = 12.sp) }
+        }
+    }
+}
 
 @Composable
 private fun EnhancePanel(
