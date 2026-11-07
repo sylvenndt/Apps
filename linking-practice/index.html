@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <!-- 字体异步加载：网络慢时先用系统字体，不卡页面 -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
-<link rel="stylesheet" href="styles.css?v=32">
+<link rel="stylesheet" href="styles.css?v=33">
 <!-- 启动画面：脚本还没下载完时先显示，避免白屏 -->
 <style>
 #boot{position:fixed;inset:0;z-index:99;display:grid;place-items:center;background:#EEF0EC;color:#121418;transition:opacity .26s ease}
@@ -56,6 +56,9 @@ setTimeout(function(){
 </head>
 <body>
 <div id="boot" role="status" aria-live="polite"><div class="in"><div class="ring"></div><div class="nm">每日美语</div></div></div>
+  <a class="me-btn" href="#me" aria-label="我的" title="我的">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20.5c1.4-3.6 4.2-5.4 7.5-5.4s6.1 1.8 7.5 5.4"/></svg>
+  </a>
   <main>
     <section class="view" id="v-today"></section>
     <section class="view" id="v-review" hidden></section>
@@ -77,24 +80,22 @@ setTimeout(function(){
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5h16v10H10l-4.5 4v-4H4z"/><path d="M8.5 10.5h7" stroke-linecap="round"/></svg>口语</a>
       <a href="#link" data-tab="link" style="--c:var(--purple)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M3 9c0 4.5 3.5 7 9 7s9-2.5 9-7"/><path d="M3 5v2M21 5v2"/></svg>连读</a>
-      <a href="#me" data-tab="me" style="--c:var(--ink)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20.5c1.4-3.6 4.2-5.4 7.5-5.4s6.1 1.8 7.5 5.4"/></svg>我的</a>
     </nav>
   </div>
   <div id="toast" role="status" aria-live="polite"></div>
 
-  <script src="tts-bridge.js?v=32"></script>
-<script src="data.js?v=32"></script>
-  <script src="emotion.js?v=32"></script>
-  <script src="words.js?v=32"></script>
-  <script src="vocab.js?v=32"></script>
-  <script src="linking.js?v=32"></script>
-  <script src="core.js?v=32"></script>
-  <script src="ai.js?v=32"></script>
-  <script src="replies_zh.js?v=32"></script>
-  <script src="neural.js?v=32"></script>
-  <script src="stt.js?v=32"></script>
-  <script src="pron.js?v=32"></script>
-  <script src="app.js?v=32"></script>
+  <script src="tts-bridge.js?v=33"></script>
+<script src="data.js?v=33"></script>
+  <script src="emotion.js?v=33"></script>
+  <script src="words.js?v=33"></script>
+  <script src="vocab.js?v=33"></script>
+  <script src="linking.js?v=33"></script>
+  <script src="core.js?v=33"></script>
+  <script src="ai.js?v=33"></script>
+  <script src="replies_zh.js?v=33"></script>
+  <script src="neural.js?v=33"></script>
+  <script src="stt.js?v=33"></script>
+  <script src="pron.js?v=33"></script>
+  <script src="app.js?v=33"></script>
 </body>
 </html>

@@ -202,7 +202,7 @@ canvas.wave{width:100%;height:92px;display:block;border-radius:12px;background:v
 /* 底部导航 */
 .tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--bg);border-top:1px solid var(--rule);
   padding-bottom:env(safe-area-inset-bottom)}
-.tabs nav{max-width:640px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr);height:var(--tab-h)}
+.tabs nav{max-width:640px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);height:var(--tab-h)}
 .tabs a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--muted);text-decoration:none;font-size:11px;font-weight:600;position:relative}
 .tabs a svg{width:23px;height:23px}
 .tabs a.on{color:var(--ink)}
@@ -340,3 +340,10 @@ button:active,.btn:active,.chip:active,.opt:active:not(:disabled),.tile:active,.
 .pron.compact .pron-words{font-size:16px}.pron.compact .pron-total{width:60px;height:60px}.pron.compact .pron-total b{font-size:21px}
 .gfix{margin-top:10px;padding:12px 14px;border-radius:16px;background:var(--sunk)}
 .gfix-line{margin:6px 0;font-size:15px}
+
+/* 右上角「我的」入口（底部只留四个学习 tab） */
+.me-btn{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));right:14px;z-index:23;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;color:var(--muted);background:var(--card,rgba(255,255,255,.86));border:1px solid var(--rule);box-shadow:0 4px 14px rgba(20,22,26,.08);text-decoration:none;backdrop-filter:blur(10px);-webkit-tap-highlight-color:transparent;transition:transform .16s ease,color .16s ease,background .16s ease}
+.me-btn:active{transform:scale(.92)}
+.me-btn svg{width:21px;height:21px}
+.me-btn.on{color:var(--ink);border-color:currentColor}
+@media (prefers-color-scheme:dark){.me-btn{background:rgba(30,32,38,.84)}}

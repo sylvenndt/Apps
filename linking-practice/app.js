@@ -1849,6 +1849,7 @@ function route(){
   ROUTES.forEach(x => $("#v-" + x).hidden = x !== v);
   const tab = ["review", "library", "words"].includes(v) ? "today" : v;
   $$(".tabs a").forEach(a => a.classList.toggle("on", a.dataset.tab === tab));
+  const mb = $(".me-btn"); if(mb) mb.classList.toggle("on", tab === "me");
   // 数据没变、页面也渲染过：直接显示，不重画（切换标签瞬间完成）
   const ver = store.ver + "|" + dayKey();
   const keep = KEEP_VIEWS.has(v) && VIEW_VER[v] === ver && $("#v-" + v).childElementCount && !(v === "listen" && Listen.state === "hf");

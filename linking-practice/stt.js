@@ -35,6 +35,7 @@ const Mic = {
   state: "unknown", // granted | denied | prompt | unknown
   supported(){ return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia); },
   async query(){
+    if(window.DSHREC && window.DSHREC.ready()){ this.state = "granted"; return this.state; }
     try{
       const p = await navigator.permissions.query({ name: "microphone" });
       this.state = p.state; p.onchange = () => { this.state = p.state; document.dispatchEvent(new Event("fluent-mic")); };
@@ -43,6 +44,11 @@ const Mic = {
   },
   /* 主动申请麦克风权限：系统会弹出「允许使用麦克风」 */
   async ensure(){
+    if(window.DSHREC && window.DSHREC.ready()){
+      this.state = "granted"; this._okThisSession = true; store.set("micOk", true);
+      document.dispatchEvent(new Event("fluent-mic"));
+      return { ok: true };
+    }
     if(!this.supported()) return { ok: false, error: IN_APP_BROWSER ? "mic-inapp" : "mic-unsupported" };
     if(this.state === "granted" && this._okThisSession) return { ok: true };
     try{
@@ -67,6 +73,43 @@ const Mic = {
   },
   /* 录音：说完停顿一会儿自动结束。返回 16kHz 的声音（给识别用）和 WAV（回放用） */
   record({ ctx, maxMs = 20000, silenceMs = 1800, waitMs = 9000, onLevel } = {}){
+    /* App 里优先用原生录音：WebView 的 getUserMedia 在部分机型上会报 NotReadableError */
+    if(window.DSHREC && window.DSHREC.ready()){
+      const R = window.DSHREC;
+      const done = (async () => {
+        try{ R.reset(); }catch(_){}
+        let started = false;
+        try{ started = R.start(maxMs, silenceMs); }catch(_){ started = false; }
+        if(!started) return { error: "mic-busy" };
+        const t0 = performance.now();
+        while(performance.now() - t0 < maxMs + 6000){
+          await new Promise(r => setTimeout(r, 110));
+          let st = "idle";
+          try{ st = R.state(); }catch(_){ st = "error:state"; }
+          if(st === "rec"){ try{ onLevel && onLevel(Math.min(1, R.level() / 2500), true); }catch(_){} continue; }
+          if(st === "done"){
+            let b64 = "";
+            try{ b64 = R.result() || ""; }catch(_){ b64 = ""; }
+            try{ R.reset(); }catch(_){}
+            if(!b64) return { error: "mic-stalled" };
+            const bin = atob(b64), n = bin.length >> 1;
+            const f = new Float32Array(n);
+            for(let i = 0; i < n; i++){
+              let v = bin.charCodeAt(i * 2) | (bin.charCodeAt(i * 2 + 1) << 8);
+              if(v > 32767) v -= 65536;
+              f[i] = v / 32768;
+            }
+            if(n < 1600) return { error: "mic-stalled" };
+            const out = await pack([f], 16000, true);
+            return { ...out, speech: true, peak: 1, reason: "native" };
+          }
+          return { error: st.indexOf("error:") === 0 ? "mic-busy" : "mic-stalled" };
+        }
+        try{ R.stop(); }catch(_){}
+        return { error: "mic-stalled" };
+      })();
+      return { stop(){ try{ R.stop(); }catch(_){} }, done };
+    }
     let stopNow = null, stream = null;
     const done = (async () => {
       if(!this.supported()) return { error: IN_APP_BROWSER ? "mic-inapp" : "mic-unsupported" };
