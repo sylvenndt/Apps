@@ -1666,7 +1666,7 @@ Views.me.renderStt = function(){
     : Mic.state === "denied" ? `<span class="no">麦克风权限被拒绝了</span><br><span class="small">${esc(MIC_FIX)}</span>`
     : `还没允许使用麦克风。点下面的按钮，手机会弹出「允许使用麦克风」，点「允许」。`;
   const model = st === "ready" ? `<span class="ok">识别模型已就绪</span>（${esc(m.name)}）`
-    : st === "loading" ? `正在下载识别模型… <b>${Math.round(Whisper.progress * 100)}%</b><div class="bar2"><i style="width:${Math.round(Whisper.progress * 100)}%"></i></div>`
+    : st === "loading" ? `正在下载识别模型… <b>${Math.round(Whisper.progress * 100)}%</b>（已下载 ${Whisper.gotMb.toFixed(0)}MB / 约${m.mb}MB${Whisper.rate > 0 ? "，" + (Whisper.rate / 1048576).toFixed(1) + "MB/s" : ""}）<div class="bar2"><i style="width:${Math.round(Whisper.progress * 100)}%"></i></div><p class="small muted" style="margin-top:6px">连 Wi-Fi 下载更快；页面别关，关了就从头下。</p>`
     : st === "error" ? `<span class="no">模型加载失败</span>：${esc(Whisper.error)}<br><span class="small muted">网络不稳就再点一次；连 Wi-Fi 下载更省流量。</span>`
     : Whisper.downloaded() ? `识别模型已下载（${esc(m.name)}），用的时候自动启动。` : `还没下载（${esc(m.desc)}）。`;
   const nowTxt = now === "local" ? "现在用的是：手机上识别" : now === "system" ? "现在用的是：手机自带识别" : "这个浏览器没法识别";

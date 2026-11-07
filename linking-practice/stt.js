@@ -7,9 +7,9 @@
    「自动」模式下，系统识别用不了时会自动改用手机上识别。 */
 const IS_STANDALONE = (() => { try{ return matchMedia("(display-mode: standalone)").matches || navigator.standalone === true; }catch(_){ return false; } })();
 const STT_MODELS = {
-  large: { id: "Xenova/whisper-small.en", mb: 240, name: "最准", desc: "约 240MB，12 层解码器，口音重、连读也认得出（最接近真人听写，推荐）" },
-  small: { id: "distil-whisper/distil-small.en", mb: 172, name: "标准", desc: "约 172MB，速度和准确度折中，普通句子够用" },
-  base: { id: "Xenova/whisper-base.en", mb: 77, name: "省流量", desc: "约 77MB，下载快、识别快，但口音重时容易认错" }
+  small: { id: "distil-whisper/distil-small.en", mb: 172, name: "标准", desc: "约 172MB，识别又快又准，普通句子很少认错（推荐）" },
+  base: { id: "Xenova/whisper-base.en", mb: 77, name: "省流量", desc: "约 77MB，下载和识别都最快，口音重时容易认错" },
+  large: { id: "Xenova/whisper-small.en", mb: 240, name: "最准", desc: "约 240MB，12 层解码器，口音重、连读也认得出，但下载慢、识别也慢" }
 };
 /* 要用打包了 onnxruntime 的完整版（transformers.min.js）；transformers.web.js 需要另外引入 onnxruntime，直接 import 会失败。
    第一项是本仓库自带的（stt/ 目录，20MB 运行库跟 App 一起下载，国内不用翻墙也能用）；
@@ -177,13 +177,14 @@ function sttWorkerSource(urls){
   return `
 const URLS = ${JSON.stringify(urls)};
 const HF = "https://huggingface.co/", MIRROR = "https://hf-mirror.com/";
-let useMirror = false;
+// 国内连 huggingface.co 又慢又容易断，所以先走镜像；镜像也不行再回官方
+let useMirror = true, mirrorBad = false;
 const realFetch = self.fetch.bind(self);
 self.fetch = async (input, init) => {
   const url = typeof input === "string" ? input : (input && input.url) || String(input);
   if(url.startsWith(HF)){
-    if(!useMirror){ try{ const r = await realFetch(url, init); if(r.ok) return r; }catch(e){} useMirror = true; }
-    return realFetch(MIRROR + url.slice(HF.length), init);
+    if(!mirrorBad){ try{ const r = await realFetch(MIRROR + url.slice(HF.length), init); if(r.ok) return r; }catch(e){} mirrorBad = true; }
+    return realFetch(url, init);
   }
   return realFetch(input, init);
 };
@@ -216,8 +217,8 @@ self.onmessage = async e => {
 };`;
 }
 const Whisper = {
-  state: "off", progress: 0, error: "", worker: null, files: {}, jobs: new Map(), seq: 0, waiters: [], loaded: null,
-  model(){ return STT_MODELS[Settings.get("sttModel")] || STT_MODELS.large; },
+  state: "off", progress: 0, error: "", worker: null, files: {}, jobs: new Map(), seq: 0, waiters: [], loaded: null, rate: 0, gotMb: 0,
+  model(){ return STT_MODELS[Settings.get("sttModel")] || STT_MODELS.small; },
   downloaded(){ return store.get("sttReady") === this.model().id; },
   emit(){ document.dispatchEvent(new Event("fluent-stt")); },
   reset(){ try{ this.worker && this.worker.terminate(); }catch(_){} this.worker = null; this.state = "off"; this.loaded = null; this.emit(); },
@@ -226,18 +227,22 @@ const Whisper = {
     if(this.worker) this.reset();
     if(typeof Worker === "undefined"){ this.state = "error"; this.error = "这个浏览器不支持后台运行识别模型"; this.emit(); return; }
     const model = this.model().id;
-    this.state = "loading"; this.progress = 0; this.error = ""; this.files = {}; this.emit();
+    this.state = "loading"; this.progress = 0; this.error = ""; this.files = {}; this.rate = 0; this.gotMb = 0; this.emit();
     try{ navigator.storage && navigator.storage.persist && navigator.storage.persist(); }catch(_){}
     try{ this.worker = new Worker(URL.createObjectURL(new Blob([sttWorkerSource(TRANSFORMERS_URLS.map(absUrl))], { type: "text/javascript" })), { type: "module" }); }
     catch(e){ this.fail("识别模型启动失败：" + e.message); return; }
-    let last = 0;
+    let last = 0, lastT = 0, lastGot = 0;
     this.worker.onmessage = e => {
       const d = e.data;
       if(d.type === "progress"){
         const p = d.p; if(p.file && p.total) this.files[p.file] = [p.loaded || 0, p.total];
         const arr = Object.values(this.files), tot = arr.reduce((a, x) => a + x[1], 0), got = arr.reduce((a, x) => a + x[0], 0);
         this.progress = tot ? got / tot : 0;
-        if(Date.now() - last > 300){ last = Date.now(); this.emit(); }
+        this.gotMb = got / 1048576;
+        const now = Date.now();
+        if(now - lastT > 1200 && lastT){ const dt = (now - lastT) / 1000; this.rate = Math.max(0, (got - lastGot) / dt); }
+        if(now - lastT > 1200){ lastT = now; lastGot = got; }
+        if(now - last > 300){ last = now; this.emit(); }
       } else if(d.type === "ready"){
         this.state = "ready"; this.loaded = model; this.progress = 1; store.set("sttReady", model); this.emit();
         this.waiters.splice(0).forEach(w => w.res());
@@ -269,6 +274,8 @@ const Whisper = {
 if(!store.get("sttMig19")){ if(Settings.get("sttModel") !== "small") Settings.set("sttModel", "small"); store.set("sttMig19", true); }
 /* 版本 24 起默认换成最准的那个；已经下载过模型的人不动他的选择（不想让他重新下一个 240MB） */
 if(!store.get("sttMig24")){ if(!store.get("sttReady")) Settings.set("sttModel", "large"); store.set("sttMig24", true); }
+/* 版本 25：最准那个太大、下载太慢，默认改回「标准」（准确度差不了多少，下载和识别都快一半多） */
+if(!store.get("sttMig25")){ if(Settings.get("sttModel") === "large" && !store.get("sttReady")) Settings.set("sttModel", "small"); store.set("sttMig25", true); }
 /* Whisper 遇到噪音会输出 [BLANK_AUDIO]、(music) 之类，去掉 */
 const cleanStt = t => String(t || "").replace(/\[[^\]]*\]|\([^)]*\)|\*[^*]*\*/g, " ").replace(/\s+/g, " ").trim();
 
@@ -344,7 +351,7 @@ function localListen(opts){
     const r = await rec.done;
     if(r.error) return { text: "", error: r.error };
     if(!r.speech || r.seconds < 0.3) return { text: "", error: "no-speech", audio: r.wav };
-    const prog = () => { if(Whisper.state === "loading") status(`正在下载识别模型 ${Math.round(Whisper.progress * 100)}%…（只需一次）`); };
+    const prog = () => { if(Whisper.state === "loading") status(`正在下载识别模型 ${Math.round(Whisper.progress * 100)}%${Whisper.rate > 0 ? "（" + (Whisper.rate / 1048576).toFixed(1) + "MB/s）" : ""}…只需一次，页面别关`); };
     document.addEventListener("fluent-stt", prog); prog();
     if(Whisper.state === "ready") status("识别中…");
     try{
