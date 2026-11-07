@@ -1,5 +1,5 @@
 "use strict";
-const APP_VERSION = 26; // 跟 index.html 的 ?v= 和 sw.js 的版本一起改
+const APP_VERSION = 27; // 跟 index.html 的 ?v= 和 sw.js 的版本一起改
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -18,6 +18,7 @@ const store = {
   },
   ver: 0,
   set(k, v){ this._c.set(k, v); this.ver++; try{ localStorage.setItem("fluent:" + k, JSON.stringify(v)); }catch(_){} },
+  del(k){ this._c.delete(k); this.ver++; try{ localStorage.removeItem("fluent:" + k); }catch(_){} },
   keys(){ try{ return Object.keys(localStorage).filter(k => k.startsWith("fluent:")).map(k => k.slice(7)); }catch(_){ return []; } }
 };
 // 其他标签页改了数据时，丢掉缓存

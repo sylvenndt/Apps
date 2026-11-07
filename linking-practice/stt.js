@@ -308,19 +308,22 @@ const Whisper = {
     return new Promise((res, rej) => { this.jobs.set(id, { res, rej }); this.worker.postMessage({ type: "run", id, pcm }, [pcm.buffer]); });
   }
 };
+/* 迁移：每段都包起来，任何一段出错都不能把整个 App 带崩（v26 就是这个坑：store.del 不存在，直接停在启动画面） */
+function mig(key, fn){
+  try{ if(!store.get(key)){ fn(); store.set(key, true); } }catch(e){ console.warn("迁移 " + key + " 跳过：", e); try{ store.set(key, true); }catch(_){} }
+}
 /* 版本 19 起默认用更准的模型：之前选过的也换一次（没下载的会在第一次用时询问） */
-if(!store.get("sttMig19")){ if(Settings.get("sttModel") !== "small") Settings.set("sttModel", "small"); store.set("sttMig19", true); }
+mig("sttMig19", () => { if(Settings.get("sttModel") !== "small") Settings.set("sttModel", "small"); });
 /* 版本 24 起默认换成最准的那个；已经下载过模型的人不动他的选择（不想让他重新下一个 240MB） */
-if(!store.get("sttMig24")){ if(!store.get("sttReady")) Settings.set("sttModel", "large"); store.set("sttMig24", true); }
+mig("sttMig24", () => { if(!store.get("sttReady")) Settings.set("sttModel", "large"); });
 /* 版本 25：最准那个太大、下载太慢，默认改回「标准」（准确度差不了多少，下载和识别都快一半多） */
-if(!store.get("sttMig25")){ if(Settings.get("sttModel") === "large" && !store.get("sttReady")) Settings.set("sttModel", "small"); store.set("sttMig25", true); }
+mig("sttMig25", () => { if(Settings.get("sttModel") === "large" && !store.get("sttReady")) Settings.set("sttModel", "small"); });
 /* 版本 26：模型换成 ModelScope 上的同名仓库（国内直连 5MB/s），旧的下载记录作废，得重新下一次 */
-if(!store.get("sttMig26")){
+mig("sttMig26", () => {
   const ids = Object.values(STT_MODELS).map(m => m.id);
   if(store.get("sttReady") && ids.indexOf(store.get("sttReady")) < 0) store.del("sttReady");
   if(ids.indexOf(Settings.get("sttModel")) < 0) Settings.set("sttModel", "small");
-  store.set("sttMig26", true);
-}
+});
 /* Whisper 遇到噪音会输出 [BLANK_AUDIO]、(music) 之类，去掉 */
 const cleanStt = t => String(t || "").replace(/\[[^\]]*\]|\([^)]*\)|\*[^*]*\*/g, " ").replace(/\s+/g, " ").trim();
 

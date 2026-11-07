@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <!-- 字体异步加载：网络慢时先用系统字体，不卡页面 -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
-<link rel="stylesheet" href="styles.css?v=26">
+<link rel="stylesheet" href="styles.css?v=27">
 <!-- 启动画面：脚本还没下载完时先显示，避免白屏 -->
 <style>
 #boot{position:fixed;inset:0;z-index:99;display:grid;place-items:center;background:#EEF0EC;color:#121418;transition:opacity .26s ease}
@@ -26,6 +26,33 @@
 @media (prefers-color-scheme:dark){#boot{background:#121418;color:#EEF0EC}}
 @keyframes bootspin{to{transform:rotate(360deg)}}
 </style>
+<script>
+/* 自救：脚本本身出错或某个文件没下好时，不会一直卡在启动画面 —— 7 秒后给出「重新下载并启动」按钮 */
+window.addEventListener("error", function(e){ try{ if(!window.__bootErr) window.__bootErr = (e && e.message) || "脚本加载失败"; }catch(_){} });
+setTimeout(function(){
+  var b = document.getElementById("boot");
+  if(!b || !b.isConnected) return;
+  var msg = window.__bootErr || "";
+  b.innerHTML = '<div class="nm" style="font-size:16px;opacity:1">启动失败了</div>' +
+    '<p style="font-size:13px;line-height:1.6;opacity:.72;margin:2px 0 16px;max-width:15em;text-align:center">' +
+    (msg ? "错误：" + msg.replace(/[<>&]/g, "") : "有一份文件没下载完整，重新下一次就好") + '</p>' +
+    '<button id="bootFix" style="padding:11px 20px;border-radius:99px;border:0;background:#121418;color:#fff;font-size:15px;font-weight:600">重新下载并启动</button>';
+  var f = document.getElementById("bootFix");
+  if(!f) return;
+  f.onclick = function(){
+    f.textContent = "正在修复…";
+    var jobs = [];
+    try{ jobs.push(caches.keys().then(function(ks){
+      return Promise.all(ks.filter(function(k){ return k.indexOf("daily-english-") === 0; }).map(function(k){ return caches.delete(k); }));
+    })); }catch(_){}
+    try{ jobs.push(navigator.serviceWorker.getRegistrations().then(function(rs){
+      return Promise.all(rs.map(function(r){ return r.unregister(); }));
+    })); }catch(_){}
+    Promise.all(jobs).then(function(){ location.replace(location.pathname + "?r=" + Date.now()); },
+                            function(){ location.reload(); });
+  };
+}, 7000);
+</script>
 </head>
 <body>
 <div id="boot" role="status" aria-live="polite"><div class="in"><div class="ring"></div><div class="nm">每日美语</div></div></div>
@@ -56,17 +83,17 @@
   </div>
   <div id="toast" role="status" aria-live="polite"></div>
 
-  <script src="data.js?v=26"></script>
-  <script src="emotion.js?v=26"></script>
-  <script src="words.js?v=26"></script>
-  <script src="vocab.js?v=26"></script>
-  <script src="linking.js?v=26"></script>
-  <script src="core.js?v=26"></script>
-  <script src="ai.js?v=26"></script>
-  <script src="replies_zh.js?v=26"></script>
-  <script src="neural.js?v=26"></script>
-  <script src="stt.js?v=26"></script>
-  <script src="pron.js?v=26"></script>
-  <script src="app.js?v=26"></script>
+  <script src="data.js?v=27"></script>
+  <script src="emotion.js?v=27"></script>
+  <script src="words.js?v=27"></script>
+  <script src="vocab.js?v=27"></script>
+  <script src="linking.js?v=27"></script>
+  <script src="core.js?v=27"></script>
+  <script src="ai.js?v=27"></script>
+  <script src="replies_zh.js?v=27"></script>
+  <script src="neural.js?v=27"></script>
+  <script src="stt.js?v=27"></script>
+  <script src="pron.js?v=27"></script>
+  <script src="app.js?v=27"></script>
 </body>
 </html>
