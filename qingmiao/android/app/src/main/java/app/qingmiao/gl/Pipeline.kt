@@ -98,12 +98,13 @@ class Pipeline {
 
     /**
      * 全分辨率导出：返回 RGBA 字节（与 Bitmap ARGB_8888 内存布局一致）。
-     * fullBitmap 上传后即可回收。
+     * fullBitmap 上传到显存后立刻回收，压低内存峰值（5000 万像素时能省下约 200MB）。
      */
     fun renderFull(fullBitmap: Bitmap, params: EditParams, onProgress: (Float) -> Unit): ByteBuffer {
         val w = fullBitmap.width
         val h = fullBitmap.height
         val tex = uploadTexture(fullBitmap)
+        fullBitmap.recycle()
         val out = ByteBuffer.allocateDirect(w * h * 4)
         val tile = 1024
         val target = RenderTarget.rgba8(min(tile, w), min(tile, h), GLES30.GL_NEAREST)

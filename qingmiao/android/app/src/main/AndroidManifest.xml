@@ -10,6 +10,7 @@
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="轻描"
+        android:largeHeap="true"
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
         android:theme="@style/Theme.Qingmiao">
