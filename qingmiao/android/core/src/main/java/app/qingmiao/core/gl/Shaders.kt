@@ -1,4 +1,4 @@
-package app.qingmiao.gl
+package app.qingmiao.core.gl
 
 /**
  * 全部 GLSL ES 3.00 源码。

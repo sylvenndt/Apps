@@ -1,4 +1,4 @@
-package app.qingmiao.ui
+package app.qingmiao.core.ui
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -17,15 +17,22 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
+import android.graphics.BitmapFactory
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.qingmiao.R
+
 
 @Composable
-fun HomeScreen(onPick: () -> Unit) {
+fun HomeScreen(versionInfo: String, onPick: () -> Unit) {
+    val context = LocalContext.current
+    val logo = remember {
+        runCatching { context.assets.open("logo.png").use { BitmapFactory.decodeStream(it) } }.getOrNull()
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -35,11 +42,13 @@ fun HomeScreen(onPick: () -> Unit) {
         verticalArrangement = Arrangement.Center,
     ) {
         Spacer(Modifier.weight(1f))
-        Image(
-            painter = painterResource(R.drawable.logo),
-            contentDescription = null,
-            modifier = Modifier.size(112.dp),
-        )
+        if (logo != null) {
+            Image(
+                bitmap = logo.asImageBitmap(),
+                contentDescription = null,
+                modifier = Modifier.size(112.dp),
+            )
+        }
         Spacer(Modifier.height(28.dp))
         Text("轻描", fontSize = 40.sp, fontWeight = FontWeight.Bold, color = QmColors.Ink)
         Spacer(Modifier.height(6.dp))
@@ -67,10 +76,12 @@ fun HomeScreen(onPick: () -> Unit) {
         }
         Spacer(Modifier.height(14.dp))
         Text(
-            "照片只在这台手机上处理：不联网、不上传",
+            "修图都在这台手机上完成；只有 AI 调参会联网",
             fontSize = 12.sp,
             color = QmColors.Muted,
         )
+        Spacer(Modifier.height(4.dp))
+        Text(versionInfo, fontSize = 11.sp, color = QmColors.Track)
         Spacer(Modifier.height(8.dp))
     }
 }

@@ -15,4 +15,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "Qingmiao"
-include(":app")
+include(":app", ":core")

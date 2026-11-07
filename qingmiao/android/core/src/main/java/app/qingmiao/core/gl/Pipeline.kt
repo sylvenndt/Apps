@@ -1,11 +1,11 @@
-package app.qingmiao.gl
+package app.qingmiao.core.gl
 
 import android.graphics.Bitmap
 import android.opengl.GLES30
 import android.opengl.GLUtils
-import app.qingmiao.EditParams
-import app.qingmiao.Filters
-import app.qingmiao.Vision
+import app.qingmiao.core.EditParams
+import app.qingmiao.core.Filters
+import app.qingmiao.core.Vision
 import java.nio.ByteBuffer
 import kotlin.math.ceil
 import kotlin.math.exp

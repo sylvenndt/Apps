@@ -1,4 +1,4 @@
-package app.qingmiao.gl
+package app.qingmiao.core.gl
 
 import android.opengl.GLES30
 import java.nio.ByteBuffer

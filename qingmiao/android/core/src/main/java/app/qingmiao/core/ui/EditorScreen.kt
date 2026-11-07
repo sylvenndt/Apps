@@ -1,4 +1,4 @@
-package app.qingmiao.ui
+package app.qingmiao.core.ui
 
 import android.graphics.Bitmap
 import android.graphics.ColorSpace
@@ -82,17 +82,17 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import app.qingmiao.AiTuner
-import app.qingmiao.Analyzer
-import app.qingmiao.Enhancer
-import app.qingmiao.EditParams
-import app.qingmiao.Filters
-import app.qingmiao.ImageIO
-import app.qingmiao.Inpainter
-import app.qingmiao.SliderSpec
-import app.qingmiao.Tool
-import app.qingmiao.Vision
-import app.qingmiao.gl.EditorEngine
+import app.qingmiao.core.AiTuner
+import app.qingmiao.core.Analyzer
+import app.qingmiao.core.Enhancer
+import app.qingmiao.core.EditParams
+import app.qingmiao.core.Filters
+import app.qingmiao.core.ImageIO
+import app.qingmiao.core.Inpainter
+import app.qingmiao.core.SliderSpec
+import app.qingmiao.core.Tool
+import app.qingmiao.core.Vision
+import app.qingmiao.core.gl.EditorEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch

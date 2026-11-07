@@ -1,4 +1,4 @@
-package app.qingmiao.gl
+package app.qingmiao.core.gl
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -6,8 +6,8 @@ import android.opengl.GLES30
 import android.opengl.GLSurfaceView
 import android.os.Handler
 import android.os.Looper
-import app.qingmiao.EditParams
-import app.qingmiao.Vision
+import app.qingmiao.core.EditParams
+import app.qingmiao.core.Vision
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.nio.ByteBuffer
 import javax.microedition.khronos.egl.EGLConfig

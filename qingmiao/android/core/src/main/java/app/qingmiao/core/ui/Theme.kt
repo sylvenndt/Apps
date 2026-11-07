@@ -1,4 +1,4 @@
-package app.qingmiao.ui
+package app.qingmiao.core.ui
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme

@@ -1,4 +1,4 @@
-package app.qingmiao
+package app.qingmiao.core
 
 /**
  * 一次编辑的完整状态（滑杆数值）。

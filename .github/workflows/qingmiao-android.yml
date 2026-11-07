@@ -42,27 +42,51 @@ jobs:
           curl -fL --retry 3 -o $M/lama_dilated.tflite https://huggingface.co/qualcomm/LaMa-Dilated/resolve/765dbb9f5406651bf84f90f72dd869d3121c50d2/LaMa-Dilated.tflite
           ls -la $M
 
-      - name: 编译 APK
+      - name: 编译核心（在线更新的部分）
         working-directory: qingmiao/android
+        env:
+          RUN: ${{ github.run_number }}
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon --stacktrace assembleRelease
+          ./gradlew --no-daemon --stacktrace :core:assembleRelease
+          rm -rf build/coreaar && mkdir -p build/coreaar app/src/main/assets/core
+          unzip -o -q core/build/outputs/aar/core-release.aar classes.jar -d build/coreaar
+          BT=$(ls $ANDROID_HOME/build-tools | sort -V | tail -1)
+          PLAT=$(ls $ANDROID_HOME/platforms | sort -V | tail -1)
+          $ANDROID_HOME/build-tools/$BT/d8 --release --min-api 29 \
+            --lib $ANDROID_HOME/platforms/$PLAT/android.jar \
+            --output build/core.jar build/coreaar/classes.jar
+          cp build/core.jar app/src/main/assets/core/core.jar
+          echo $RUN > app/src/main/assets/core/version.txt
+          ls -la build/core.jar
+
+      - name: 编译外壳 APK
+        working-directory: qingmiao/android
+        run: ./gradlew --no-daemon --stacktrace :app:assembleRelease
 
       - name: 发布
         env:
           GH_TOKEN: ${{ github.token }}
           RUN: ${{ github.run_number }}
         run: |
+          # 在线更新：核心代码放到 Pages，外壳每次启动会来取
+          mkdir -p qingmiao/update
+          git rm -q --ignore-unmatch qingmiao/update/core-*.jar || true
+          cp qingmiao/android/build/core.jar qingmiao/update/core-$RUN.jar
+          SHA=$(sha256sum qingmiao/update/core-$RUN.jar | cut -d' ' -f1)
+          MIN=$(cat qingmiao/android/min-shell.txt)
+          echo "{\"version\":$RUN,\"file\":\"core-$RUN.jar\",\"sha256\":\"$SHA\",\"minShell\":$MIN}" > qingmiao/update/core.json
+          # 外壳安装包（只有外壳变了才需要重装）
           APK=qingmiao/android/app/build/outputs/apk/release/app-release.apk
           cp $APK qingmiao.apk
           SIZE=$(stat -c%s qingmiao.apk)
           gh release delete qingmiao-latest --yes --cleanup-tag || true
           gh release create qingmiao-latest qingmiao.apk \
-            --title "轻描 v0.1.$RUN" --notes "轻描安卓安装包（自动构建）。下载页：https://sylvenndt.github.io/Apps/qingmiao/"
-          echo "{\"version\":\"0.1.$RUN\",\"built\":\"$(date -u +%Y-%m-%dT%H:%MZ)\",\"size\":$SIZE,\"url\":\"https://github.com/sylvenndt/Apps/releases/download/qingmiao-latest/qingmiao.apk\"}" > qingmiao/version.json
+            --title "轻描 外壳 $MIN（构建 $RUN）" --notes "轻描安卓安装包。装一次即可，之后功能在线更新。"
+          echo "{\"version\":\"$RUN\",\"shell\":$MIN,\"built\":\"$(date -u +%Y-%m-%dT%H:%MZ)\",\"size\":$SIZE,\"url\":\"https://github.com/sylvenndt/Apps/releases/download/qingmiao-latest/qingmiao.apk\"}" > qingmiao/version.json
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add qingmiao/version.json
-          git commit -m "轻描：自动打包 v0.1.$RUN"
+          git add qingmiao/version.json qingmiao/update
+          git commit -m "轻描：在线更新 v$RUN"
           git pull --rebase origin main
           git push origin HEAD:main

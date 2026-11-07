@@ -1,4 +1,4 @@
-package app.qingmiao
+package app.qingmiao.core
 
 import android.graphics.Bitmap
 import android.graphics.PointF
