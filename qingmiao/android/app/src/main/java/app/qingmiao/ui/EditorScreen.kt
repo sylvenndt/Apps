@@ -484,13 +484,6 @@ fun EditorScreen(uri: Uri, onBack: () -> Unit) {
                     }
                 }
                 if (showOriginal) {
-                                    showOriginal = false
-                                    engine.setOriginal(false)
-                                }
-                            })
-                        }
-                )
-                if (showOriginal) {
                     Text(
                         "原图",
                         color = QmColors.Ink,
