@@ -1,5 +1,5 @@
 "use strict";
-const APP_VERSION = 23; // 跟 index.html 的 ?v= 和 sw.js 的版本一起改
+const APP_VERSION = 24; // 跟 index.html 的 ?v= 和 sw.js 的版本一起改
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -24,7 +24,7 @@ const store = {
 window.addEventListener("storage", e => { if(e.key && e.key.startsWith("fluent:")) store._c.delete(e.key.slice(7)); });
 
 const Settings = {
-  defaults: { speed: 0.9, voice: "", reactSec: 8, engine: "neural", cast: "scene", accent: "both", voice1: "af_heart", voice2: "am_michael", apiKey: "", model: "claude-sonnet-5-5", srEngine: "auto", sttModel: "small", azureKey: "", azureRegion: "eastasia", aiProvider: "deepseek", dsKey: "", dsModel: "deepseek-flash", dsBase: "", keepAudio: true, reviewMode: "listen", focus: [], newPerDay: 10, newWordsPerDay: 15, mix: { scenes: true, vocab: true, pattern: true }, startLevel: "B1" },
+  defaults: { speed: 0.9, voice: "", reactSec: 8, engine: "neural", cast: "scene", accent: "both", voice1: "af_heart", voice2: "am_michael", apiKey: "", model: "claude-sonnet-5-5", srEngine: "auto", sttModel: "large", azureKey: "", azureRegion: "eastasia", aiProvider: "deepseek", dsKey: "", dsModel: "deepseek-flash", dsBase: "", keepAudio: true, reviewMode: "listen", focus: [], newPerDay: 10, newWordsPerDay: 15, mix: { scenes: true, vocab: true, pattern: true }, startLevel: "B1" },
   get(k){ const s = store.get("settings", {}); return k in s ? s[k] : this.defaults[k]; },
   set(k, v){ const s = store.get("settings", {}); s[k] = v; store.set("settings", s); }
 };

@@ -1,0 +1,6 @@
+*.wasm binary
+*.onnx binary
+*.ogg binary
+*.png binary
+*.wav binary
+*.bin binary

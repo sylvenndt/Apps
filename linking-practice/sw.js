@@ -1,8 +1,8 @@
 /* 离线缓存：页面先给缓存（秒开），新版本在后台装好后由页面顶部提示条接管；
    其余同源文件缓存优先。顺便给页面加上跨源隔离头，让 AI 语音可以多核运算。
    录好的语音（audio/*.ogg）单独存在 fluent-audio-v1 里，App 更新时不会被清掉。 */
-const CACHE = "daily-english-v23";
-const V = "?v=23";
+const CACHE = "daily-english-v24";
+const V = "?v=24";
 const AUDIO_CACHE = "fluent-audio-v1";
 const CORE = ["./", "index.html", "styles.css" + V, "data.js" + V, "emotion.js" + V, "words.js" + V, "vocab.js" + V, "linking.js" + V, "core.js" + V, "ai.js" + V, "replies_zh.js" + V, "neural.js" + V, "stt.js" + V, "pron.js" + V, "app.js" + V, "manifest.json", "icon-192.png", "icon-512.png", "icon-180.png"];
 
@@ -63,7 +63,7 @@ self.addEventListener("fetch", e => {
     const hit = await cache.match(req);
     if(hit) return hit;
     const r = await fetch(req);
-    if(r.ok && (url.search.includes("v=") || /\.(png|bin|json)$/.test(url.pathname))) cache.put(req, r.clone());
+    if(r.ok && (url.search.includes("v=") || /\.(png|bin|json|wasm|mjs)$/.test(url.pathname))) cache.put(req, r.clone());
     return r;
   })());
 });

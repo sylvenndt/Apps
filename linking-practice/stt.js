@@ -7,11 +7,15 @@
    「自动」模式下，系统识别用不了时会自动改用手机上识别。 */
 const IS_STANDALONE = (() => { try{ return matchMedia("(display-mode: standalone)").matches || navigator.standalone === true; }catch(_){ return false; } })();
 const STT_MODELS = {
-  small: { id: "distil-whisper/distil-small.en", mb: 172, name: "最准", desc: "约 172MB，接近手机输入法的语音转文字，口音重也认得出（推荐）" },
-  base: { id: "Xenova/whisper-base.en", mb: 77, name: "标准", desc: "约 77MB，下载快，识别也快，但口音重时容易认错" }
+  large: { id: "Xenova/whisper-small.en", mb: 240, name: "最准", desc: "约 240MB，12 层解码器，口音重、连读也认得出（最接近真人听写，推荐）" },
+  small: { id: "distil-whisper/distil-small.en", mb: 172, name: "标准", desc: "约 172MB，速度和准确度折中，普通句子够用" },
+  base: { id: "Xenova/whisper-base.en", mb: 77, name: "省流量", desc: "约 77MB，下载快、识别快，但口音重时容易认错" }
 };
-/* 要用打包了 onnxruntime 的完整版（transformers.min.js）；transformers.web.js 需要另外引入 onnxruntime，直接 import 会失败 */
+/* 要用打包了 onnxruntime 的完整版（transformers.min.js）；transformers.web.js 需要另外引入 onnxruntime，直接 import 会失败。
+   第一项是本仓库自带的（stt/ 目录，20MB 运行库跟 App 一起下载，国内不用翻墙也能用）；
+   后面几项是 CDN 兜底，仓库文件出问题时还能用。 */
 const TRANSFORMERS_URLS = [
+  "stt/transformers.min.js",
   "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js",
   "https://unpkg.com/@huggingface/transformers@3.8.1/dist/transformers.min.js",
   "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.js"
@@ -60,7 +64,7 @@ const Mic = {
     try{ const c = new AC(); try{ c.resume(); }catch(_){} return c; }catch(_){ return null; }
   },
   /* 录音：说完停顿一会儿自动结束。返回 16kHz 的声音（给识别用）和 WAV（回放用） */
-  record({ ctx, maxMs = 15000, silenceMs = 1300, waitMs = 8000, onLevel } = {}){
+  record({ ctx, maxMs = 20000, silenceMs = 1800, waitMs = 9000, onLevel } = {}){
     let stopNow = null, stream = null;
     const done = (async () => {
       if(!this.supported()) return { error: IN_APP_BROWSER ? "mic-inapp" : "mic-unsupported" };
@@ -167,6 +171,8 @@ async function resample(x, from, to){
 }
 
 /* ---------- 手机上的 Whisper 识别 ---------- */
+/* 仓库里的相对路径在后台线程（blob:）里没法解析，先转成完整地址 */
+function absUrl(u){ try{ return new URL(u, location.href).href; }catch(_){ return u; } }
 function sttWorkerSource(urls){
   return `
 const URLS = ${JSON.stringify(urls)};
@@ -200,14 +206,18 @@ self.onmessage = async e => {
   const d = e.data;
   if(d.type === "load"){ try{ await load(d.model); }catch(err){ self.postMessage({ type: "error", error: String(err && err.message || err) }); } return; }
   if(d.type === "run"){
-    try{ const out = await asr(d.pcm); self.postMessage({ type: "text", id: d.id, text: String(out && out.text || "").trim() }); }
+    try{
+      // 长录音按 30 秒切块（这几个模型都是英文专用，不用再指定语言）
+      const out = await asr(d.pcm, { chunk_length_s: 30, stride_length_s: 5 });
+      self.postMessage({ type: "text", id: d.id, text: String(out && out.text || "").trim() });
+    }
     catch(err){ self.postMessage({ type: "text", id: d.id, error: String(err && err.message || err) }); }
   }
 };`;
 }
 const Whisper = {
   state: "off", progress: 0, error: "", worker: null, files: {}, jobs: new Map(), seq: 0, waiters: [], loaded: null,
-  model(){ return STT_MODELS[Settings.get("sttModel")] || STT_MODELS.small; },
+  model(){ return STT_MODELS[Settings.get("sttModel")] || STT_MODELS.large; },
   downloaded(){ return store.get("sttReady") === this.model().id; },
   emit(){ document.dispatchEvent(new Event("fluent-stt")); },
   reset(){ try{ this.worker && this.worker.terminate(); }catch(_){} this.worker = null; this.state = "off"; this.loaded = null; this.emit(); },
@@ -218,7 +228,7 @@ const Whisper = {
     const model = this.model().id;
     this.state = "loading"; this.progress = 0; this.error = ""; this.files = {}; this.emit();
     try{ navigator.storage && navigator.storage.persist && navigator.storage.persist(); }catch(_){}
-    try{ this.worker = new Worker(URL.createObjectURL(new Blob([sttWorkerSource(TRANSFORMERS_URLS)], { type: "text/javascript" })), { type: "module" }); }
+    try{ this.worker = new Worker(URL.createObjectURL(new Blob([sttWorkerSource(TRANSFORMERS_URLS.map(absUrl))], { type: "text/javascript" })), { type: "module" }); }
     catch(e){ this.fail("识别模型启动失败：" + e.message); return; }
     let last = 0;
     this.worker.onmessage = e => {
@@ -257,6 +267,8 @@ const Whisper = {
 };
 /* 版本 19 起默认用更准的模型：之前选过的也换一次（没下载的会在第一次用时询问） */
 if(!store.get("sttMig19")){ if(Settings.get("sttModel") !== "small") Settings.set("sttModel", "small"); store.set("sttMig19", true); }
+/* 版本 24 起默认换成最准的那个；已经下载过模型的人不动他的选择（不想让他重新下一个 240MB） */
+if(!store.get("sttMig24")){ if(!store.get("sttReady")) Settings.set("sttModel", "large"); store.set("sttMig24", true); }
 /* Whisper 遇到噪音会输出 [BLANK_AUDIO]、(music) 之类，去掉 */
 const cleanStt = t => String(t || "").replace(/\[[^\]]*\]|\([^)]*\)|\*[^*]*\*/g, " ").replace(/\s+/g, " ").trim();
 
@@ -286,7 +298,7 @@ const Listener = {
 };
 
 function systemListen(opts){
-  let inner = null, cancelled = false;
+  let inner = null, cancelled = false, fallback = null;
   const done = (async () => {
     let micOk = Mic.state === "granted" && Mic._okThisSession;
     if(!micOk && Mic.supported()){
@@ -299,11 +311,20 @@ function systemListen(opts){
     const r = await inner.done;
     if(r.text){ Listener.fails = 0; return r; }
     if(cancelled && r.error === "aborted") return r;
-    if(Listener.systemFailed(r.error, micOk)) return { text: "", error: "switched", detail: r.error };
+    if(Listener.systemFailed(r.error, micOk)){
+      // 同一次点击里直接换成手机上识别，不让用户再点一次
+      const say = opts.onStatus || opts.onText;
+      say && say("手机自带的语音识别用不了，已经换成手机上识别，请再说一遍…");
+      if(cancelled) return { text: "", error: "aborted" };
+      fallback = localListen(opts);
+      const r2 = await fallback.done;
+      fallback = null;
+      return { ...r2, fellBack: true, sysError: r.error };
+    }
     if(!r.error || r.error === "no-speech") return { ...r, error: "sys-no-speech" };
     return r;
   })();
-  return { stop(){ cancelled = true; inner && inner.stop(); }, done };
+  return { stop(){ cancelled = true; inner && inner.stop(); fallback && fallback.stop(); }, done };
 }
 
 function localListen(opts){
@@ -318,7 +339,7 @@ function localListen(opts){
   const ctx = Mic.context(); // 要在点击的这一刻创建
   let speaking = false;
   status("正在听…说完停一下会自动结束");
-  const rec = Mic.record({ ctx, maxMs: opts.maxMs || 15000, silenceMs: opts.silenceMs || 1300, onLevel: (lv, sp) => { if(sp && !speaking){ speaking = true; status("听到了，继续说…"); } } });
+  const rec = Mic.record({ ctx, maxMs: opts.maxMs || 20000, silenceMs: opts.silenceMs || 1800, onLevel: (lv, sp) => { if(sp && !speaking){ speaking = true; status("听到了，继续说…"); } } });
   const done = (async () => {
     const r = await rec.done;
     if(r.error) return { text: "", error: r.error };

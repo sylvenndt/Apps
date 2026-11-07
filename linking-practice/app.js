@@ -1667,7 +1667,7 @@ Views.me.renderStt = function(){
     : `还没允许使用麦克风。点下面的按钮，手机会弹出「允许使用麦克风」，点「允许」。`;
   const model = st === "ready" ? `<span class="ok">识别模型已就绪</span>（${esc(m.name)}）`
     : st === "loading" ? `正在下载识别模型… <b>${Math.round(Whisper.progress * 100)}%</b><div class="bar2"><i style="width:${Math.round(Whisper.progress * 100)}%"></i></div>`
-    : st === "error" ? `<span class="no">模型加载失败</span>：${esc(Whisper.error)}<br><span class="small muted">国内网络请先打开 VPN 再重试。</span>`
+    : st === "error" ? `<span class="no">模型加载失败</span>：${esc(Whisper.error)}<br><span class="small muted">网络不稳就再点一次；连 Wi-Fi 下载更省流量。</span>`
     : Whisper.downloaded() ? `识别模型已下载（${esc(m.name)}），用的时候自动启动。` : `还没下载（${esc(m.desc)}）。`;
   const nowTxt = now === "local" ? "现在用的是：手机上识别" : now === "system" ? "现在用的是：手机自带识别" : "这个浏览器没法识别";
   box.innerHTML = `
@@ -1677,12 +1677,13 @@ Views.me.renderStt = function(){
       <div class="chips" style="flex-wrap:wrap">
         ${[["auto", "自动"], ["local", "手机上识别"], ["system", "手机自带识别"]].map(([k, n]) => `<button class="chip${eng === k ? " on" : ""}" data-sre="${k}">${n}</button>`).join("")}
       </div>
-      <p class="help">${eng === "auto" ? "先用手机自带的识别，它在这台手机上用不了时（比如连不上 Google、主屏幕上的 iPhone App），自动改用手机上识别。" : eng === "local" ? "App 自己录音，用开源 Whisper 模型在手机上识别。不联网、不依赖 Google 或 Siri，还能回放自己读的。第一次要下载模型。" : "用浏览器自带的识别：安卓靠 Google，iPhone 靠 Siri 听写。识别快、有实时字幕，但有的手机用不了。"}</p>
+      <p class="help">${eng === "auto" ? "先用手机自带的识别；它在这台手机上用不了时（连不上 Google、从主屏幕打开的 iPhone App 等），会在同一次点击里自动换成手机上识别，不用再点第二次。" : eng === "local" ? "App 自己录音，用开源 Whisper 模型在手机上识别。不联网、不依赖 Google 或 Siri，还能回放自己读的。第一次要下载模型。" : "用浏览器自带的识别：安卓靠 Google，iPhone 靠 Siri 听写。识别快、有实时字幕，但有的手机用不了。"}</p>
       ${store.get("srBroken") && eng === "auto" ? `<p class="small muted">之前手机自带识别失败过，所以自动改成了手机上识别。<button class="link" id="stt-retry">再试试自带识别</button></p>` : ""}
     </div>
     ${eng !== "system" ? `<div class="field"><label>手机上识别的模型</label>
       <div class="chips">${Object.entries(STT_MODELS).map(([k, x]) => `<button class="chip${Settings.get("sttModel") === k ? " on" : ""}" data-stm="${k}">${x.name}（${x.mb}MB）</button>`).join("")}</div>
       <p class="small" style="margin-top:8px">${model}</p>
+      <p class="small muted" style="margin-top:4px">换一个模型要重新下载一次；「最准」体积最大也最认口音。</p>
       ${st !== "ready" && st !== "loading" ? `<button class="btn line sm" style="--c:var(--blue);margin-top:8px" id="stt-dl">${Whisper.downloaded() ? "现在启动" : st === "error" ? "重新下载" : `下载模型（约 ${m.mb}MB）`}</button>` : ""}
     </div>` : ""}
     <div class="row wrap" style="gap:8px;margin-top:6px"><button class="btn ghost sm" id="stt-test">${ICON.mic}<span>${this._sttTesting ? "说完了" : "说一句试试"}</span></button></div>
