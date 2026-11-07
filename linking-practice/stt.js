@@ -7,9 +7,9 @@
    「自动」模式下，系统识别用不了时会自动改用手机上识别。 */
 const IS_STANDALONE = (() => { try{ return matchMedia("(display-mode: standalone)").matches || navigator.standalone === true; }catch(_){ return false; } })();
 const STT_MODELS = {
-  small: { id: "distil-whisper/distil-small.en", mb: 172, name: "标准", desc: "约 172MB，识别又快又准，普通句子很少认错（推荐）" },
-  base: { id: "Xenova/whisper-base.en", mb: 77, name: "省流量", desc: "约 77MB，下载和识别都最快，口音重时容易认错" },
-  large: { id: "Xenova/whisper-small.en", mb: 240, name: "最准", desc: "约 240MB，12 层解码器，口音重、连读也认得出，但下载慢、识别也慢" }
+  small: { id: "onnx-community/distil-small.en", mb: 172, name: "标准", desc: "约 172MB，识别又快又准，普通句子很少认错（推荐）" },
+  base: { id: "onnx-community/whisper-base.en", mb: 73, name: "省流量", desc: "约 73MB，下载和识别都最快，口音重时容易认错" },
+  large: { id: "onnx-community/whisper-small.en", mb: 238, name: "最准", desc: "约 238MB，12 层解码器，口音重、连读也认得出，但下载慢、识别也慢" }
 };
 /* 要用打包了 onnxruntime 的完整版（transformers.min.js）；transformers.web.js 需要另外引入 onnxruntime，直接 import 会失败。
    第一项是本仓库自带的（stt/ 目录，20MB 运行库跟 App 一起下载，国内不用翻墙也能用）；
@@ -176,17 +176,45 @@ function absUrl(u){ try{ return new URL(u, location.href).href; }catch(_){ retur
 function sttWorkerSource(urls){
   return `
 const URLS = ${JSON.stringify(urls)};
-const HF = "https://huggingface.co/", MIRROR = "https://hf-mirror.com/";
-// 国内连 huggingface.co 又慢又容易断，所以先走镜像；镜像也不行再回官方
-let useMirror = true, mirrorBad = false;
+const HF = "https://huggingface.co/";
+/* 模型文件从哪下：① ModelScope（阿里，国内直连，实测 5MB/s）② hf-mirror ③ 官方（大概率连不上） */
+const SRC = [
+  { host: "https://modelscope.cn/models/", ms: true },
+  { host: "https://hf-mirror.com/", ms: false }
+];
 const realFetch = self.fetch.bind(self);
+let good = -1;            // 记住哪个源能用，后面所有文件直接用它
+let bytes = 0;
+function srcUrl(url, i){
+  let rest = url.slice(HF.length);                                  // 仓库名/resolve/main/文件
+  if(SRC[i].ms) rest = rest.replace("/resolve/main/", "/resolve/master/");
+  return SRC[i].host + rest;
+}
+/* 边下边数：把响应流分一路出来数字节，主线程就能显示真实的 % 和速度（有些源不给 content-length） */
+function counted(res, url){
+  try{
+    const len = +res.headers.get("content-length") || 0;
+    if(!res.body || !len) return res;
+    const pair = res.body.tee();
+    (async () => {
+      const rd = pair[1].getReader(); let got = 0;
+      for(;;){ const s = await rd.read(); if(s.done) break; got += s.value.byteLength; self.postMessage({ type: "bytes", url, got, total: len }); }
+    })().catch(() => {});
+    return new Response(pair[0], { status: res.status, statusText: res.statusText, headers: res.headers });
+  }catch(e){ return res; }
+}
 self.fetch = async (input, init) => {
   const url = typeof input === "string" ? input : (input && input.url) || String(input);
-  if(url.startsWith(HF)){
-    if(!mirrorBad){ try{ const r = await realFetch(MIRROR + url.slice(HF.length), init); if(r.ok) return r; }catch(e){} mirrorBad = true; }
-    return realFetch(url, init);
+  if(!url.startsWith(HF)) return realFetch(input, init);
+  const order = good >= 0 ? [good] : [0, 1];
+  for(const i of order){
+    try{
+      const r = await realFetch(srcUrl(url, i), init);
+      if(r.ok){ good = i; self.postMessage({ type: "src", ms: SRC[i].ms }); return counted(r, url); }
+    }catch(e){}
   }
-  return realFetch(input, init);
+  good = -1;
+  return counted(await realFetch(url, init), url);
 };
 let asr = null;
 async function load(model){
@@ -201,7 +229,7 @@ async function load(model){
     dtype: "q8", device: "wasm",
     progress_callback: p => self.postMessage({ type: "progress", p: { status: p.status, file: p.file, loaded: p.loaded, total: p.total } })
   });
-  self.postMessage({ type: "ready", mirror: useMirror });
+  self.postMessage({ type: "ready", mirror: good });
 }
 self.onmessage = async e => {
   const d = e.data;
@@ -217,7 +245,7 @@ self.onmessage = async e => {
 };`;
 }
 const Whisper = {
-  state: "off", progress: 0, error: "", worker: null, files: {}, jobs: new Map(), seq: 0, waiters: [], loaded: null, rate: 0, gotMb: 0,
+  state: "off", progress: 0, error: "", worker: null, files: {}, jobs: new Map(), seq: 0, waiters: [], loaded: null, rate: 0, gotMb: 0, bytes: {}, src: "", t0: 0,
   model(){ return STT_MODELS[Settings.get("sttModel")] || STT_MODELS.small; },
   downloaded(){ return store.get("sttReady") === this.model().id; },
   emit(){ document.dispatchEvent(new Event("fluent-stt")); },
@@ -227,24 +255,34 @@ const Whisper = {
     if(this.worker) this.reset();
     if(typeof Worker === "undefined"){ this.state = "error"; this.error = "这个浏览器不支持后台运行识别模型"; this.emit(); return; }
     const model = this.model().id;
-    this.state = "loading"; this.progress = 0; this.error = ""; this.files = {}; this.rate = 0; this.gotMb = 0; this.emit();
+    this.state = "loading"; this.progress = 0; this.error = ""; this.files = {}; this.rate = 0; this.gotMb = 0; this.bytes = {}; this.src = ""; this.t0 = Date.now(); this.emit();
     try{ navigator.storage && navigator.storage.persist && navigator.storage.persist(); }catch(_){}
     try{ this.worker = new Worker(URL.createObjectURL(new Blob([sttWorkerSource(TRANSFORMERS_URLS.map(absUrl))], { type: "text/javascript" })), { type: "module" }); }
     catch(e){ this.fail("识别模型启动失败：" + e.message); return; }
+    const total = this.model().mb * 1048576;
     let last = 0, lastT = 0, lastGot = 0;
+    const tick = got => {
+      const now = Date.now();
+      if(now - lastT > 1000 && lastT){ const dt = (now - lastT) / 1000; this.rate = Math.max(0, (got - lastGot) / dt); }
+      if(now - lastT > 1000){ lastT = now; lastGot = got; }
+      if(now - last > 400){ last = now; this.emit(); }
+    };
     this.worker.onmessage = e => {
       const d = e.data;
-      if(d.type === "progress"){
+      if(d.type === "src"){ this.src = d.ms ? "ModelScope 国内源" : "hf-mirror 镜像"; this.emit(); }
+      else if(d.type === "bytes"){
+        this.bytes[d.url] = Math.max(this.bytes[d.url] || 0, d.got);
+        const got = Object.values(this.bytes).reduce((a, x) => a + x, 0);
+        this.gotMb = got / 1048576;
+        this.progress = Math.max(this.progress, Math.min(0.995, got / total));
+        tick(got);
+      } else if(d.type === "progress"){
         const p = d.p; if(p.file && p.total) this.files[p.file] = [p.loaded || 0, p.total];
         const arr = Object.values(this.files), tot = arr.reduce((a, x) => a + x[1], 0), got = arr.reduce((a, x) => a + x[0], 0);
-        this.progress = tot ? got / tot : 0;
-        this.gotMb = got / 1048576;
-        const now = Date.now();
-        if(now - lastT > 1200 && lastT){ const dt = (now - lastT) / 1000; this.rate = Math.max(0, (got - lastGot) / dt); }
-        if(now - lastT > 1200){ lastT = now; lastGot = got; }
-        if(now - last > 300){ last = now; this.emit(); }
+        if(tot) this.progress = Math.max(this.progress, Math.min(0.995, got / tot));
+        if(got / 1048576 > this.gotMb){ this.gotMb = got / 1048576; tick(got); }
       } else if(d.type === "ready"){
-        this.state = "ready"; this.loaded = model; this.progress = 1; store.set("sttReady", model); this.emit();
+        this.state = "ready"; this.loaded = model; this.progress = 1; this.rate = 0; store.set("sttReady", model); this.emit();
         this.waiters.splice(0).forEach(w => w.res());
       } else if(d.type === "error") this.fail(d.error);
       else if(d.type === "text"){
@@ -276,6 +314,13 @@ if(!store.get("sttMig19")){ if(Settings.get("sttModel") !== "small") Settings.se
 if(!store.get("sttMig24")){ if(!store.get("sttReady")) Settings.set("sttModel", "large"); store.set("sttMig24", true); }
 /* 版本 25：最准那个太大、下载太慢，默认改回「标准」（准确度差不了多少，下载和识别都快一半多） */
 if(!store.get("sttMig25")){ if(Settings.get("sttModel") === "large" && !store.get("sttReady")) Settings.set("sttModel", "small"); store.set("sttMig25", true); }
+/* 版本 26：模型换成 ModelScope 上的同名仓库（国内直连 5MB/s），旧的下载记录作废，得重新下一次 */
+if(!store.get("sttMig26")){
+  const ids = Object.values(STT_MODELS).map(m => m.id);
+  if(store.get("sttReady") && ids.indexOf(store.get("sttReady")) < 0) store.del("sttReady");
+  if(ids.indexOf(Settings.get("sttModel")) < 0) Settings.set("sttModel", "small");
+  store.set("sttMig26", true);
+}
 /* Whisper 遇到噪音会输出 [BLANK_AUDIO]、(music) 之类，去掉 */
 const cleanStt = t => String(t || "").replace(/\[[^\]]*\]|\([^)]*\)|\*[^*]*\*/g, " ").replace(/\s+/g, " ").trim();
 
