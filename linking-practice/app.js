@@ -50,6 +50,40 @@ async function playWith(btn, text, rate, alt){
 let activeListen = null;
 function stopActiveListen(){ if(activeListen){ activeListen.stop(); activeListen = null; } }
 
+/* 离线纠错：没填 AI key 也能指出最常见的中式英语 */
+const FIX_RULES = [
+  [/\bI\s+very\s+(like|love|want)\b/gi, "I really $1", "英文不说「I very like」，用 really 加强"],
+  [/\bvery\s+very\b/gi, "really", "连用两个 very 不地道，用 really"],
+  [/\bhow\s+to\s+say\b/gi, "how do you say", "问说法要加助动词：How do you say…"],
+  [/\bdiscuss\s+about\b/gi, "discuss", "discuss 后面不加 about"],
+  [/\bopen\s+the\s+(light|lights)\b/gi, "turn on the light", "开灯是 turn on the light"],
+  [/\bclose\s+the\s+(light|lights)\b/gi, "turn off the light", "关灯是 turn off the light"],
+  [/\bI\s+am\s+agree\b/gi, "I agree", "agree 本身是动词，不用 am"],
+  [/\bI\s+(go|went)\s+to\s+home\b/gi, "I went home", "home 前面不加 to"],
+  [/\bgive\s+me\s+a\s+help\b/gi, "give me a hand", "give me a hand 才是「帮个忙」"],
+  [/\bwhat\s+is\s+your\s+meaning\b/gi, "what do you mean", "问「你什么意思」用 What do you mean"],
+  [/\bI\s+think\s+I\s+can'?t\b/gi, "I don't think I can", "英文习惯把否定提前：I don't think I can"],
+  [/\bhow\s+much\s+money\b/gi, "how much", "问价格直接说 how much"],
+  [/\bso\s+so\b/gi, "not bad", "「马马虎虎」说 not bad / pretty good"],
+  [/\bI\s+have\s+ever\s+been\s+to\b/gi, "I've been to", "用现在完成时更自然：I've been to"]
+];
+function fixText(said){
+  let out = String(said || "");
+  const changes = [];
+  FIX_RULES.forEach(([re, rep, why]) => {
+    const m = out.match(re);
+    if(m){ const next = out.replace(re, rep); if(next !== out){ changes.push({ from: m[0], to: rep, why }); out = next; } }
+  });
+  return { text: out, changes };
+}
+function fixPanel(said){
+  if(/[\u4e00-\u9fa5]/.test(said)) return `<div class="panel" style="margin-top:10px"><b>纠错</b><p class="small">这次说的是中文。试着用整句英文说，慢一点、有错都没关系，说错了我才能帮你改。</p></div>`;
+  const f = fixText(said);
+  if(!f.changes.length) return `<div class="panel" style="margin-top:10px"><b>纠错</b><p class="small ok">这句没有明显的中式英语，很好。想更地道可以填 API key 用 AI 教练。</p></div>`;
+  return `<div class="panel" style="margin-top:10px"><b>纠错</b>${f.changes.slice(0, 4).map(c => `<div class="change"><div class="ft"><s>${esc(c.from)}</s> → <b>${esc(c.to)}</b></div><div class="small muted">${esc(c.why)}</div></div>`).join("")}<p class="small" style="margin-top:6px">更自然的说法：<b>${esc(f.text)}</b></p></div>`;
+}
+
+
 const Views = {};
 
 /* ================= 今日 ================= */
@@ -91,6 +125,7 @@ Views.today = {
               `<a class="btn sm ${s.done ? "ghost" : "line"}" style="--c:${LINE[s.key]}" href="${s.href}" ${s.act ? `data-act="${s.act}"` : ""}>${s.cta}</a>`}
           </div>`).join("")}
       </div>
+      <div class="panel" style="margin-top:14px"><div class="small muted">今天的主题</div><div class="t" style="font-weight:700;margin-top:2px">${esc(((SCENES.find(x => x.key === t.scene) || {}).name || t.title))} · ${esc(t.title)}</div><p class="small muted" style="margin-top:4px">${esc(t.brief)}</p><p class="small" style="margin-top:6px">${(t.hints || []).map(h => `<span class="chip">${esc(h)}</span>`).join(" ")}</p><a class="link" href="#speak" data-act="today-topic">开始练这个话题</a></div>
       <div class="stats">
         <div class="stat"><b>${SRS.learnedCount()}</b><span>学过的句子</span></div>
         <div class="stat"><b>${Log.activeDays()}</b><span>练习天数</span></div>
@@ -861,6 +896,7 @@ Views.speak = {
       const text = coachPrompt(said);
       try{ await navigator.clipboard.writeText(text); toast("已复制，打开 DeepSeek 或 Claude 粘贴就行"); }
       catch(_){ err.hidden = false; err.style.color = "var(--muted)"; err.innerHTML = `复制失败，请手动复制：<textarea style="margin-top:6px" rows="6">${esc(text)}</textarea>`; }
+      $("#sp-thread").insertAdjacentHTML("beforeend", fixPanel(said));
       Log.add("speak");
       return;
     }
@@ -1020,7 +1056,7 @@ Object.assign(Views.speak, {
         <div class="small muted">参考回答${R.rt !== null ? `，你的反应时间 ${R.rt.toFixed(1)} 秒` : ""}</div>
         <div class="row" style="align-items:flex-start;margin-top:6px"><button class="play sm" id="rf-ans" style="--c:var(--green)" aria-label="播放">${ICON.play}</button><div class="say grow" style="font-weight:700;font-size:18px">${esc(it.reply)}</div></div>
         <p class="small muted" style="margin-top:8px">对方说的是：${esc(it.en)}（${esc(it.zh)}）</p>
-        ${R.said && hasKey ? `<button class="link" id="rf-ai" style="margin-top:10px">让 AI 把我的回答改得更地道</button>` : ""}
+        ${R.said ? fixPanel(R.said) : ""}${R.said && hasKey ? `<button class="link" id="rf-ai" style="margin-top:10px">让 AI 把我的回答改得更地道</button>` : ""}
       </div>
       <div class="grades" style="grid-template-columns:1fr 1fr;margin-top:12px">
         <button class="grade g0" data-r="0"><b>卡住了</b><span>加入复习</span></button>
