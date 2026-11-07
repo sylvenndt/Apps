@@ -429,7 +429,7 @@ const SR_ERR_MORE = {
   "mic-denied": "麦克风权限被拒绝了。" + MIC_FIX,
   "mic-insecure": "要用 https 网址打开才能用麦克风。",
   "mic-none": "没找到麦克风。",
-  "mic-busy": "麦克风被别的 App 占用了（比如在通话或录音），关掉再试。",
+  "mic-busy": "麦克风打不开：多数是系统还没给这个 App 录音权限，或者别的 App 正在录音/通话。先去「设置 → 应用 → 每日美语 → 权限」把麦克风打开，再回来点一次。",
   "mic-failed": "麦克风没能打开，再点一次试试。",
   "mic-stalled": "麦克风打开了，但没收到声音。再点一次试试；还不行就把 App 关掉重新打开。",
   "mic-unsupported": "这个浏览器不能录音，请用 Safari 或 Chrome 打开。",

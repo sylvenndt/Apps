@@ -258,6 +258,102 @@ SCENES.push(
     ["I think I'll | order takeout | tonight.", "我今晚想点外卖。", "Good idea. Get me some noodles too."],
     ["Is this | fresh?", "这个新鲜吗？", "Yeah, it just came in this morning."],
     ["Can I | get a receipt?", "能给我小票吗？", "It's in the bag."]
+  ]},
+  { key:"ride", name:"打车", en:"In a ride", mark:"R", color:"var(--blue)", items:[
+    ["Are you | picking up | on the corner?", "你是在路口接吗？", "Yeah, I'm right by the pharmacy."],
+    ["Could you | take the highway?", "能走高速吗？", "Sure, but there's a toll."],
+    ["How long | will it take | to get there?", "到那儿大概多久？", "About twenty minutes with traffic."],
+    ["Can you | drop me | at the main entrance?", "能把我放在正门吗？", "No problem, I'll pull up right there."],
+    ["Could you | turn the AC | up a bit?", "空调能开大一点吗？", "Sure, let me know if it gets too cold."],
+    ["Is it okay | if I | roll the window down?", "我可以把窗户摇下来吗？", "Go ahead."],
+    ["Do you | take cards?", "能刷卡吗？", "Cash or card, either works."],
+    ["Keep the change.", "不用找了。", "Thanks, appreciate it."],
+    ["I'm in | a bit of a hurry.", "我有点赶时间。", "I'll get you there as fast as I can."],
+    ["Right here | is fine.", "就停这儿吧。", "You got it. Have a good one."]
+  ]},
+  { key:"airport", name:"机场", en:"At the airport", mark:"A", color:"var(--purple)", items:[
+    ["Where's | the check-in counter?", "值机柜台在哪？", "Straight ahead, past security."],
+    ["I'd like | a window seat, | please.", "我想要靠窗的座位。", "Sure, let me see what's available."],
+    ["How many bags | are you checking?", "你托运几件行李？", "Just one, and this one's carry-on."],
+    ["Is this | the line | for security?", "这是安检的队伍吗？", "Yeah, it starts over there."],
+    ["Do I need | to take | my laptop out?", "笔记本要拿出来吗？", "Yes, and your liquids too."],
+    ["What's | the gate number?", "登机口是几号？", "It's B12, boarding in forty minutes."],
+    ["Is the flight | on time?", "航班准点吗？", "It's delayed about twenty minutes."],
+    ["Could I | get an aisle seat | instead?", "能换个过道座吗？", "Let me check. Yes, I can move you."],
+    ["Where do I | pick up | my luggage?", "在哪儿取行李？", "Baggage claim is downstairs, carousel three."],
+    ["I think | my bag | didn't make it.", "我的包好像没到。", "Let's file a report right now."]
+  ]},
+  { key:"doctor", name:"看病", en:"At the doctor's", mark:"D2", color:"var(--red)", items:[
+    ["I've had | a sore throat | for three days.", "我嗓子疼了三天。", "Any fever or cough?"],
+    ["It hurts | when I | swallow.", "咽东西的时候疼。", "Let me take a look."],
+    ["I'm allergic | to penicillin.", "我对青霉素过敏。", "Good to know. I'll prescribe something else."],
+    ["Do I need | to take | it with food?", "需要饭后吃吗？", "Yes, with food, twice a day."],
+    ["How long | will it take | to kick in?", "多久能见效？", "You should feel better in two or three days."],
+    ["Can I | still go | to work?", "我还能去上班吗？", "I'd rest for a day or two."],
+    ["I've been | feeling | really tired lately.", "我最近特别累。", "Let's run a quick blood test."],
+    ["Should I | come back | for a follow-up?", "需要复诊吗？", "If it's not better in a week, yes."],
+    ["Is there | anything | I should avoid?", "有什么要忌口的吗？", "Skip alcohol and get plenty of sleep."],
+    ["Thanks, | that's | a relief.", "谢谢，那我就放心了。", "Take care, and call if it gets worse."]
+  ]},
+  { key:"pharmacy", name:"药店", en:"At the pharmacy", mark:"P", color:"var(--green)", items:[
+    ["Do you have | anything | for a cough?", "有治咳嗽的药吗？", "Yes, this one works well at night."],
+    ["Does this | make you | drowsy?", "这个吃了会犯困吗？", "A little, so take it before bed."],
+    ["How often | do I take it?", "多久吃一次？", "Every six hours, as needed."],
+    ["Is there | a generic | version?", "有便宜点的同成分药吗？", "Yes, it's half the price."],
+    ["Do I need | a prescription?", "需要处方吗？", "Not for this one."],
+    ["Can I | take this | with other meds?", "这个能和其他药一起吃吗？", "Better to check with your doctor."],
+    ["My stomach's | been | acting up.", "我胃一直不舒服。", "Try these; they're gentle."],
+    ["Is it okay | for kids?", "小孩能吃吗？", "This one's for adults only."],
+    ["Could you | check | the dosage?", "能帮我看一下剂量吗？", "Two tablets, twice a day."],
+    ["I'll take it. | Thanks.", "我买了，谢谢。", "You're welcome. Feel better soon."]
+  ]},
+  { key:"gym", name:"健身房", en:"At the gym", mark:"G", color:"var(--teal)", items:[
+    ["I'd like | to sign up.", "我想办张卡。", "Great, let me show you our plans."],
+    ["Is there | a joining fee?", "有入会费吗？", "There's a one-time fee of thirty dollars."],
+    ["Can I | freeze | my membership?", "我能暂停会员吗？", "Yes, for up to two months a year."],
+    ["What are | your hours?", "你们几点开门？", "Five in the morning to eleven at night."],
+    ["Do you have | personal training?", "有私教吗？", "We do, starting at fifty an hour."],
+    ["Is the pool | included?", "泳池包含在内吗？", "Yes, it's included in every plan."],
+    ["Can I | try it | for a week?", "能先试一周吗？", "Sure, the first week's free."],
+    ["Where are | the lockers?", "更衣室在哪儿？", "Down the hall, past the weights."],
+    ["I'm | a total beginner.", "我完全是新手。", "No worries, we'll start you slow."],
+    ["Does this | cover | classes too?", "团课也包含吗？", "All of them, except the specialty ones."]
+  ]},
+  { key:"barber", name:"理发", en:"At the barber's", mark:"B", color:"var(--brown)", items:[
+    ["Just a trim, | please.", "就修一下。", "How much off the sides?"],
+    ["A little shorter | on top.", "上面再短一点。", "Like this? Let me know if it's too much."],
+    ["Could you | leave the top | a bit longer?", "上面留长一点。", "Sure, I'll just clean up the edges."],
+    ["I'd like | a fade.", "我想推渐变。", "High fade or low fade?"],
+    ["Do you | have | any gel?", "有发胶吗？", "We do, want me to put some in?"],
+    ["How long | will it take?", "要多久？", "About twenty-five minutes."],
+    ["Can I | book | for next week?", "能约下周吗？", "Sure, same time?"],
+    ["That's | a bit too short.", "有点太短了。", "Sorry, I can even it out."],
+    ["How much | do I owe?", "多少钱？", "Twenty-five, cash or card."],
+    ["Looks great. | Thanks!", "挺好看的，谢谢！", "Anytime. See you next month."]
+  ]},
+  { key:"bank", name:"银行", en:"At the bank", mark:"K", color:"var(--blue)", items:[
+    ["I'd like | to open | an account.", "我想开个账户。", "Sure, do you have your ID with you?"],
+    ["What's | the minimum | balance?", "最低余额是多少？", "There's no minimum on this one."],
+    ["Are there | any monthly fees?", "有月费吗？", "Not if you set up direct deposit."],
+    ["I need | to replace | my card.", "我要补办卡。", "We can print a new one today."],
+    ["Can you | check | my balance?", "能查一下余额吗？", "You're at twelve hundred and forty."],
+    ["I'd like | to transfer | some money.", "我想转点钱。", "How much, and to which account?"],
+    ["The ATM | ate my card.", "ATM 把我的卡吞了。", "Let me look that up for you."],
+    ["What's | the exchange rate | today?", "今天汇率多少？", "It's on the board behind you."],
+    ["Is there | a fee | for that?", "这个收费吗？", "It's free for members."],
+    ["Thanks | for your help.", "谢谢帮忙。", "Happy to help. Anything else?"]
+  ]},
+  { key:"neighbor", name:"邻里闲谈", en:"Chatting with a neighbor", mark:"N", color:"var(--green)", items:[
+    ["Hey, | how's it going?", "嘿，最近怎么样？", "Pretty good, you?"],
+    ["Did you | hear | the noise last night?", "你昨晚听到响声了吗？", "Yeah, it woke me up too."],
+    ["Do you know | a good | plumber?", "你认识靠谱的水管工吗？", "I do, I'll text you his number."],
+    ["Would you mind | keeping it down | after ten?", "十点以后能小声点吗？", "Of course, sorry about that."],
+    ["We're | having a few people over | Saturday.", "周六我们要请几个人来。", "Thanks for the heads-up."],
+    ["Could you | grab | my package?", "能帮我收个快递吗？", "Sure, I'll bring it over tonight."],
+    ["How long | have you | lived here?", "你住这儿多久了？", "About three years now."],
+    ["The elevator's | out again.", "电梯又坏了。", "I know, I filed a complaint."],
+    ["Let me know | if you need | anything.", "需要什么就跟我说。", "That's really nice of you."],
+    ["See you | around.", "回头见。", "Take care!"]
   ]}
 );
 
