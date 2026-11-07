@@ -20,8 +20,9 @@ object Analyzer {
     /** faces：人脸与脖子的椭圆 (cx, cy, rx, ry)×n，归一化坐标，y 向下。 */
     class Result(val params: EditParams, val skinRatio: Float, val faces: FloatArray)
 
-    fun analyze(bitmap: Bitmap): Result {
-        val faces = detectFaces(bitmap)
+    fun analyze(bitmap: Bitmap, vision: Vision.Maps? = null): Result {
+        // 优先用 AI 关键点定位的人脸；没有就退回系统自带的人脸检测
+        val faces = if (vision != null && vision.faceCount > 0) vision.faces else detectFaces(bitmap)
         val scale = 256f / max(bitmap.width, bitmap.height)
         val small = if (scale < 1f) {
             Bitmap.createScaledBitmap(
@@ -99,11 +100,16 @@ object Analyzer {
         // 有人脸：正常人像档；没检测到人脸但有大片肤色：轻一点；都没有：不动皮肤
         val portrait = faces.isNotEmpty()
         val maybePeople = !portrait && skinRatio > 0.03f
+        val landmarks = vision != null && vision.faceCount > 0
         val params = EditParams(
             smooth = if (portrait) 55f else if (maybePeople) 35f else 0f,
             even = if (portrait) 45f else if (maybePeople) 30f else 0f,
             white = if (portrait) 30f else if (maybePeople) 20f else 0f,
             rosy = if (portrait) 12f else 0f,
+            eyes = if (landmarks) 30f else 0f,
+            teeth = if (landmarks) 35f else 0f,
+            underEye = if (landmarks) 35f else 0f,
+            lips = if (landmarks) 10f else 0f,
             brightness = brightness.round1(),
             contrast = contrast.round1(),
             highlights = highlights,

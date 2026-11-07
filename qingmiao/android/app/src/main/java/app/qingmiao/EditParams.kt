@@ -10,6 +10,13 @@ data class EditParams(
     val even: Float = 0f,         // 肤色均匀
     val white: Float = 0f,        // 美白
     val rosy: Float = 0f,         // 气色
+    val eyes: Float = 0f,         // 亮眼
+    val teeth: Float = 0f,        // 白牙
+    val lips: Float = 0f,         // 唇色（-100..100）
+    val underEye: Float = 0f,     // 去黑眼圈
+    // 背景（需要 AI 人像分割）
+    val bgBlur: Float = 0f,       // 背景虚化
+    val bgDark: Float = 0f,       // 背景压暗
     // 光影
     val brightness: Float = 0f,   // 亮度
     val contrast: Float = 0f,     // 对比
@@ -53,6 +60,8 @@ enum class Tool(val label: String) {
     AUTO("一键美化"),
     FILTER("滤镜"),
     PORTRAIT("人像"),
+    FACE("五官"),
+    BACKGROUND("背景"),
     LIGHT("光影"),
     COLOR("色彩"),
     DETAIL("细节"),
@@ -66,6 +75,16 @@ enum class Tool(val label: String) {
                 pos("肤色均匀", { it.even }, { p, v -> p.copy(even = v) }),
                 pos("美白", { it.white }, { p, v -> p.copy(white = v) }),
                 pos("气色", { it.rosy }, { p, v -> p.copy(rosy = v) }),
+            )
+            FACE -> listOf(
+                pos("亮眼", { it.eyes }, { p, v -> p.copy(eyes = v) }),
+                pos("白牙", { it.teeth }, { p, v -> p.copy(teeth = v) }),
+                bi("唇色", { it.lips }, { p, v -> p.copy(lips = v) }),
+                pos("去黑眼圈", { it.underEye }, { p, v -> p.copy(underEye = v) }),
+            )
+            BACKGROUND -> listOf(
+                pos("背景虚化", { it.bgBlur }, { p, v -> p.copy(bgBlur = v) }),
+                pos("背景压暗", { it.bgDark }, { p, v -> p.copy(bgDark = v) }),
             )
             LIGHT -> listOf(
                 bi("亮度", { it.brightness }, { p, v -> p.copy(brightness = v) }),

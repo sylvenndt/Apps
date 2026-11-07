@@ -51,15 +51,19 @@ float facePrior(vec2 uv) {
 }
 """
 
-    /** 源图 → 工作分辨率：输出引导滤波需要的各项（MRT 2 张）。 */
+    /** 源图 → 工作分辨率：输出引导滤波需要的各项（MRT 3 张）。 */
     const val PREP = """#version 300 es
 precision highp float;
 in vec2 vUv;
 uniform sampler2D uSrc;
+uniform sampler2D uSeg;    // R 皮肤 G 头发 B 人 A 面部皮肤
+uniform sampler2D uFeat;   // R 眼睛 G 口腔 B 嘴唇 A 眼下
+uniform int uHasSeg;
 uniform vec2 uSrcTexel;
 uniform float uOff;
 layout(location = 0) out vec4 o0;
 layout(location = 1) out vec4 o1;
+layout(location = 2) out vec4 o2;
 $SKIN_MASK
 void main() {
     vec2 d = uSrcTexel * uOff;
@@ -70,10 +74,44 @@ void main() {
     float y = dot(c, vec3(0.299, 0.587, 0.114));
     float cb = (c.b - y) * 0.564;
     float cr = (c.r - y) * 0.713;
-    float m = skinMask(y, cb, cr) * facePrior(vUv);
+    vec4 sg = texture(uSeg, vUv);
+    vec4 ft = texture(uFeat, vUv);
+    float excl = max(ft.r, max(ft.g, ft.b));
+    float m;
+    float person;
+    if (uHasSeg == 1) {
+        // AI 分割出的皮肤为主，色度模型只做轻微修正
+        m = sg.r * (0.7 + 0.3 * skinMask(y, cb, cr));
+        person = sg.b;
+    } else {
+        m = skinMask(y, cb, cr) * facePrior(vUv);
+        person = 1.0;
+    }
+    m *= 1.0 - excl;   // 眼睛、嘴巴不算皮肤
     float i = y - 0.5;
     o0 = vec4(i, i * i, cb, cr);
     o1 = vec4(i * cb, i * cr, m, i * m);
+    o2 = vec4(person, i * person, 0.0, 1.0);
+}
+"""
+
+    /** 背景虚化的源：只取背景像素（预乘），避免人物颜色晕到背景里。 */
+    const val BGPREP = """#version 300 es
+precision highp float;
+in vec2 vUv;
+uniform sampler2D uSrc;
+uniform sampler2D uSeg;
+uniform vec2 uSrcTexel;
+uniform float uOff;
+layout(location = 0) out vec4 o0;
+void main() {
+    vec2 d = uSrcTexel * uOff;
+    vec3 c = 0.25 * (texture(uSrc, vUv + vec2(-d.x, -d.y)).rgb
+                   + texture(uSrc, vUv + vec2( d.x, -d.y)).rgb
+                   + texture(uSrc, vUv + vec2(-d.x,  d.y)).rgb
+                   + texture(uSrc, vUv + vec2( d.x,  d.y)).rgb);
+    float bg = 1.0 - smoothstep(0.2, 0.6, texture(uSeg, vUv).b);
+    o0 = vec4(c * bg, bg);
 }
 """
 
@@ -127,6 +165,7 @@ precision highp float;
 in vec2 vUv;
 uniform sampler2D uM0;
 uniform sampler2D uM1;
+uniform sampler2D uM2;
 uniform float uEpsY;
 uniform float uEpsC;
 uniform float uEpsM;
@@ -147,10 +186,13 @@ void main() {
     float bCr = m0.w - aCr * mi;
     float aM = (m1.w - mi * m1.z) / (varI + uEpsM);
     float bM = m1.z - aM * mi;
+    vec4 m2 = texture(uM2, vUv);
+    float aP = (m2.y - mi * m2.x) / (varI + uEpsM);
+    float bP = m2.x - aP * mi;
     float gate = 1.0 - smoothstep(uGate.x, uGate.y, varI);
     o0 = vec4(aY, bY, aCb, bCb);
     o1 = vec4(aCr, bCr, aM, bM);
-    o2 = vec4(gate, 0.0, 0.0, 1.0);
+    o2 = vec4(gate, aP, bP, 1.0);
 }
 """
 
@@ -164,6 +206,9 @@ uniform sampler2D uA1;
 uniform sampler2D uA2;
 uniform sampler2D uB0;
 uniform sampler2D uLut;
+uniform sampler2D uFeat;   // R 眼睛 G 口腔 B 嘴唇 A 眼下
+uniform sampler2D uBlur;   // 背景虚化（预乘背景色，a = 背景权重）
+uniform int uHasSeg;
 uniform vec2 uTexel;
 uniform float uSigma1;     // 细纹理带（全分辨率约 1.4 px）
 uniform float uSigma2;     // 锐化半径（全分辨率约 2 px）
@@ -174,6 +219,12 @@ uniform float uSmoothFine;
 uniform float uEven;
 uniform float uWhite;
 uniform float uRosy;
+uniform float uEyes;
+uniform float uTeeth;
+uniform float uLips;
+uniform float uUnderEye;
+uniform float uBgBlur;
+uniform float uBgDark;
 // 光影
 uniform float uGamma;
 uniform float uContrastK;
@@ -284,7 +335,10 @@ void main() {
     float yc = y - 0.5;
     vec4 a0 = texture(uA0, vUv);
     vec4 a1v = texture(uA1, vUv);
-    float gate = clamp(texture(uA2, vUv).r, 0.0, 1.0);
+    vec4 a2v = texture(uA2, vUv);
+    float gate = clamp(a2v.r, 0.0, 1.0);
+    float person = uHasSeg == 1 ? clamp(a2v.g * (y - 0.5) + a2v.b, 0.0, 1.0) : 1.0;
+    vec4 ft = texture(uFeat, vUv);
     float baseY = a0.x * yc + a0.y + 0.5;
     float baseCb = a0.z * yc + a0.w;
     float baseCr = a1v.x * yc + a1v.y;
@@ -306,6 +360,19 @@ void main() {
     c2 *= 1.0 - uWhite * 0.18 * skin;
     // 气色：皮肤稍微偏粉
     c2 += uRosy * skin * vec2(-0.006, 0.032);
+    // 亮眼：眼白提亮 + 虹膜一点局部对比
+    y2 += uEyes * ft.r * (0.12 * (1.0 - y2) * smoothstep(0.15, 0.6, y2) + 0.8 * clamp(y - g2y, -0.08, 0.08));
+    // 白牙：口腔里偏亮、不偏红的像素（牙龈、舌头不动）去黄提亮
+    float teeth = ft.g * smoothstep(0.3, 0.55, y) * (1.0 - smoothstep(0.07, 0.15, cr));
+    c2 = mix(c2, c2 * 0.3, uTeeth * teeth);
+    y2 += uTeeth * teeth * 0.09 * (1.0 - y2);
+    // 唇色：嘴唇饱和度（负值 = 淡一点）
+    c2 *= 1.0 + uLips * 0.55 * ft.b;
+    c2.y += max(uLips, 0.0) * 0.015 * ft.b;
+    // 去黑眼圈：眼下提亮、去青灰
+    float ue = ft.a * (1.0 - ft.r);
+    y2 += uUnderEye * ue * 0.08 * (1.0 - y2);
+    c2 = mix(c2, vec2(c2.x * 0.7, c2.y + 0.01), uUnderEye * ue * 0.6);
     // 锐化（只在亮度上，皮肤上减弱，限幅防白边）
     y2 += uSharpen * clamp(y - g2y, -0.12, 0.12) * (1.0 - 0.6 * skin);
 
@@ -315,8 +382,16 @@ void main() {
     e.g = (y2 - 0.299 * e.r - 0.114 * e.b) / 0.587;
     e = clamp(e, 0.0, 1.0);
 
+    // 背景虚化：用 AI 抠出的人像（引导滤波细化到发丝边缘），背景换成预先模糊好的版本
+    float bgw = 1.0 - person;
+    if (uBgBlur > 0.0 && uHasSeg == 1) {
+        vec4 bl = texture(uBlur, vUv);
+        if (bl.a > 0.02) e = mix(e, bl.rgb / bl.a, uBgBlur * bgw * smoothstep(0.02, 0.15, bl.a));
+    }
+
     // —— 线性光 ——
     vec3 lin = toLinear(e) * uWb;
+    lin *= 1.0 - uBgDark * 0.45 * bgw;
     float y0 = dot(lin, W709);
     float satE = max(e.r, max(e.g, e.b)) - min(e.r, min(e.g, e.b));
     float satAmt = uSaturation * (uSaturation > 0.0 ? 1.0 - 0.4 * skin : 1.0);

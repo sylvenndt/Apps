@@ -7,6 +7,7 @@ import android.opengl.GLSurfaceView
 import android.os.Handler
 import android.os.Looper
 import app.qingmiao.EditParams
+import app.qingmiao.Vision
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.nio.ByteBuffer
 import javax.microedition.khronos.egl.EGLConfig
@@ -38,6 +39,7 @@ class EditorEngine(context: Context) : GLSurfaceView.Renderer {
     private var fullW = 0
     private var fullH = 0
     private var faces = FloatArray(0)
+    private var vision: Vision.Maps? = null
     private var lut: Bitmap? = null
     private var viewW = 1
     private var viewH = 1
@@ -51,12 +53,13 @@ class EditorEngine(context: Context) : GLSurfaceView.Renderer {
         view.renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
     }
 
-    fun setImage(bitmap: Bitmap, fullWidth: Int, fullHeight: Int, faceEllipses: FloatArray) {
+    fun setImage(bitmap: Bitmap, fullWidth: Int, fullHeight: Int, faceEllipses: FloatArray, maps: Vision.Maps?) {
         view.queueEvent {
             source = bitmap
             fullW = fullWidth
             fullH = fullHeight
             faces = faceEllipses
+            vision = maps
             loadSource()
         }
         view.requestRender()
@@ -158,7 +161,7 @@ class EditorEngine(context: Context) : GLSurfaceView.Renderer {
         val bmp = source ?: return
         val pl = pipeline ?: return
         try {
-            pl.setPreview(bmp, fullW, fullH, faces)
+            pl.setPreview(bmp, fullW, fullH, faces, vision)
             lut?.let { pl.setLut(it) }
             renderedParams = null
         } catch (e: Exception) {

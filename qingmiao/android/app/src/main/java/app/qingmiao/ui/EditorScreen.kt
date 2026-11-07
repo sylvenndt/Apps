@@ -72,6 +72,7 @@ import app.qingmiao.Filters
 import app.qingmiao.ImageIO
 import app.qingmiao.SliderSpec
 import app.qingmiao.Tool
+import app.qingmiao.Vision
 import app.qingmiao.gl.EditorEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -100,6 +101,8 @@ fun EditorScreen(uri: Uri, onBack: () -> Unit) {
     var preview by remember { mutableStateOf<Bitmap?>(null) }
     var thumbs by remember { mutableStateOf<Map<String, Bitmap>>(emptyMap()) }
     val filters = remember { Filters.list(context) }
+    var hasSeg by remember { mutableStateOf(false) }
+    var faceCount by remember { mutableStateOf(0) }
 
     /** 只改预览（拖动中）。 */
     fun applyParams(p: EditParams) {
@@ -155,12 +158,15 @@ fun EditorScreen(uri: Uri, onBack: () -> Unit) {
         val result = withContext(Dispatchers.IO) {
             runCatching {
                 val d = ImageIO.decode(context, uri, min(ImageIO.PREVIEW_LONG, engine.maxTextureSize))
-                d to Analyzer.analyze(d.bitmap)
+                val vision = Vision.analyze(context, d.bitmap)
+                Triple(d, Analyzer.analyze(d.bitmap, vision), vision)
             }
         }
-        result.onSuccess { (d, a) ->
+        result.onSuccess { (d, a, vision) ->
             preview = d.bitmap
-            engine.setImage(d.bitmap, d.fullWidth, d.fullHeight, a.faces)
+            hasSeg = vision?.hasSeg == true
+            faceCount = vision?.faceCount ?: (a.faces.size / 8)
+            engine.setImage(d.bitmap, d.fullWidth, d.fullHeight, a.faces, vision)
             auto = a.params
             commit(a.params) // 打开就是一键美化
             loaded = true
@@ -331,6 +337,12 @@ fun EditorScreen(uri: Uri, onBack: () -> Unit) {
                                 .verticalScroll(rememberScrollState())
                                 .padding(horizontal = 14.dp, vertical = 4.dp)
                         ) {
+                            val note = when {
+                                tool == Tool.BACKGROUND && !hasSeg -> "这张照片里没识别出人像，背景功能不可用"
+                                tool == Tool.FACE && faceCount == 0 -> "这张照片里没识别出人脸，五官功能不起作用"
+                                else -> null
+                            }
+                            if (note != null) Text(note, color = QmColors.Muted, fontSize = 12.sp, modifier = Modifier.padding(4.dp))
                             for (spec in tool.sliders) {
                                 ParamRow(
                                     spec = spec,
@@ -377,7 +389,7 @@ private fun AutoPanel(params: EditParams, auto: EditParams, onAuto: () -> Unit, 
     ) {
         val status = when {
             params.isOriginal -> "当前是原图"
-            params == auto -> "已一键美化：按这张照片的光线、肤色自动调好了"
+            params == auto -> "已一键美化：按这张照片的光线、肤色、五官自动调好了"
             else -> "已手动调整"
         }
         Text(status, color = QmColors.Muted, fontSize = 13.sp, textAlign = TextAlign.Center)

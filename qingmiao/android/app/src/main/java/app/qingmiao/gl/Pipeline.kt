@@ -5,6 +5,7 @@ import android.opengl.GLES30
 import android.opengl.GLUtils
 import app.qingmiao.EditParams
 import app.qingmiao.Filters
+import app.qingmiao.Vision
 import java.nio.ByteBuffer
 import kotlin.math.ceil
 import kotlin.math.exp
@@ -33,6 +34,15 @@ class Pipeline {
     private val coef = Program(Shaders.VERTEX, Shaders.COEF)
     private val finalProg = Program(Shaders.VERTEX, Shaders.FINAL)
     private val display = Program(Shaders.VERTEX, Shaders.DISPLAY)
+    private val bgprep = Program(Shaders.VERTEX, Shaders.BGPREP)
+
+    // AI 识别结果（分割、五官）；没有时用 1×1 的默认纹理
+    private val defaultSeg = uploadBytes(byteArrayOf(0, 0, 255.toByte(), 0), 1, 1)
+    private val defaultFeat = uploadBytes(byteArrayOf(0, 0, 0, 0), 1, 1)
+    private var segTex = 0
+    private var featTex = 0
+    private var hasSeg = false
+    private var blurT: RenderTarget? = null
 
     private var srcTex = 0
     var srcWidth = 0
@@ -58,9 +68,16 @@ class Pipeline {
      * 设置预览图（在导入时调用一次），并计算引导滤波系数。
      * faces：人脸/脖子椭圆，每 4 个数一组 (cx, cy, rx, ry)，归一化坐标，y 向下；空 = 没检测到人脸。
      */
-    fun setPreview(bitmap: Bitmap, fullWidth: Int, fullHeight: Int, faces: FloatArray) {
+    fun setPreview(bitmap: Bitmap, fullWidth: Int, fullHeight: Int, faces: FloatArray, vision: Vision.Maps?) {
         releaseImage()
         srcTex = uploadTexture(bitmap)
+        if (vision != null) {
+            segTex = uploadBytes(vision.seg, vision.width, vision.height)
+            featTex = uploadBytes(vision.feat, vision.width, vision.height)
+            hasSeg = vision.hasSeg
+        } else {
+            hasSeg = false
+        }
         srcWidth = bitmap.width
         srcHeight = bitmap.height
         fullLong = max(fullWidth, fullHeight)
@@ -166,6 +183,8 @@ class Pipeline {
         releaseImage()
         if (lutTex != 0) GLES30.glDeleteTextures(1, intArrayOf(lutTex), 0)
         lutTex = 0
+        GLES30.glDeleteTextures(2, intArrayOf(defaultSeg, defaultFeat), 0)
+        bgprep.release()
         prep.release(); down.release(); box.release(); coef.release(); finalProg.release(); display.release()
         quad.release()
     }
@@ -175,6 +194,11 @@ class Pipeline {
     private fun releaseImage() {
         if (srcTex != 0) GLES30.glDeleteTextures(1, intArrayOf(srcTex), 0)
         srcTex = 0
+        if (segTex != 0) GLES30.glDeleteTextures(1, intArrayOf(segTex), 0)
+        if (featTex != 0) GLES30.glDeleteTextures(1, intArrayOf(featTex), 0)
+        segTex = 0
+        featTex = 0
+        blurT = null
         maps.forEach { it.release() }
         maps.clear()
         coefA = null
@@ -190,11 +214,14 @@ class Pipeline {
         val wh = max(1, (srcHeight * workScale).roundToInt())
 
         // 级别 A：磨皮、肤色、皮肤掩膜
-        val prepT = RenderTarget.half(ww, wh, 2).also { maps += it }
+        val prepT = RenderTarget.half(ww, wh, 3).also { maps += it }
         prepT.bind()
         prep.use()
         setFull(prep)
         prep.texture("uSrc", 0, srcTex)
+        prep.texture("uSeg", 1, if (segTex != 0) segTex else defaultSeg)
+        prep.texture("uFeat", 2, if (featTex != 0) featTex else defaultFeat)
+        prep.set1i("uHasSeg", if (hasSeg) 1 else 0)
         prep.set2f("uSrcTexel", 1f / srcWidth, 1f / srcHeight)
         prep.set1f("uOff", srcWidth.toFloat() / ww / 4f)
         val faceCount = min(8, faces.size / 4)
@@ -203,9 +230,9 @@ class Pipeline {
         quad.draw()
 
         val ra = max(2, (max(ww, wh) * 0.008f).roundToInt())
-        val meanA = boxFilter(prepT, 2, ra)
+        val meanA = boxFilter(prepT, 3, ra)
         // 纹理门：有人脸定位时只挡住五官这类强结构；没有人脸时更严，挡住头发、织物等一切有纹理的区域
-        val gate = if (faceCount > 0) floatArrayOf(0.004f, 0.015f) else floatArrayOf(0.0012f, 0.0045f)
+        val gate = if (faceCount > 0 || hasSeg) floatArrayOf(0.004f, 0.015f) else floatArrayOf(0.0012f, 0.0045f)
         coefA = coefficients(meanA, epsY = 0.003f, epsC = 0.003f, epsM = 0.01f, ra = ra, gate = gate)
 
         // 级别 B：清晰度用的大尺度底图
@@ -222,6 +249,23 @@ class Pipeline {
         val rb = 4
         val meanB = boxFilter(downT, 1, rb)
         coefB = coefficients(meanB, epsY = 0.004f, epsC = 0.004f, epsM = 0.01f, ra = rb, gate = gate)
+
+        // 背景虚化：只在有人像分割时准备（预乘背景色后模糊三遍 ≈ 高斯）
+        if (hasSeg) {
+            val gw = max(1, ww / 2)
+            val gh = max(1, wh / 2)
+            val g0 = RenderTarget.half(gw, gh, 1).also { maps += it }
+            g0.bind()
+            bgprep.use()
+            setFull(bgprep)
+            bgprep.texture("uSrc", 0, srcTex)
+            bgprep.texture("uSeg", 1, segTex)
+            bgprep.set2f("uSrcTexel", 1f / srcWidth, 1f / srcHeight)
+            bgprep.set1f("uOff", srcWidth.toFloat() / gw / 4f)
+            quad.draw()
+            val rg = max(3, (max(gw, gh) * 0.012f).roundToInt())
+            blurT = boxFilter(boxFilter(boxFilter(g0, 1, rg), 1, rg), 1, rg)
+        }
 
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
         val err = GLES30.glGetError()
@@ -261,6 +305,7 @@ class Pipeline {
         setFull(coef)
         coef.texture("uM0", 0, mean.tex(0))
         coef.texture("uM1", 1, mean.tex(min(1, count - 1)))
+        coef.texture("uM2", 2, mean.tex(min(2, count - 1)))
         coef.set1f("uEpsY", epsY)
         coef.set1f("uEpsC", epsC)
         coef.set1f("uEpsM", epsM)
@@ -290,6 +335,9 @@ class Pipeline {
         finalProg.texture("uB0", 4, b.tex(0))
         finalProg.set2f("uTexel", 1f / texW, 1f / texH)
         finalProg.texture("uLut", 5, if (lutTex != 0) lutTex else tex)
+        finalProg.texture("uFeat", 6, if (featTex != 0) featTex else defaultFeat)
+        finalProg.texture("uBlur", 7, blurT?.tex() ?: tex)
+        finalProg.set1i("uHasSeg", if (hasSeg && blurT != null) 1 else 0)
 
         // 细纹理带 σ1 ≈ 1.4 px、锐化 σ2 ≈ 2 px（按 4000 px 长边的全分辨率），换算到当前纹理
         val scale = max(texW, texH) / fullLong.toFloat()
@@ -307,6 +355,12 @@ class Pipeline {
         finalProg.set1f("uEven", u.even)
         finalProg.set1f("uWhite", u.white)
         finalProg.set1f("uRosy", u.rosy)
+        finalProg.set1f("uEyes", u.eyes)
+        finalProg.set1f("uTeeth", u.teeth)
+        finalProg.set1f("uLips", u.lips)
+        finalProg.set1f("uUnderEye", u.underEye)
+        finalProg.set1f("uBgBlur", u.bgBlur)
+        finalProg.set1f("uBgDark", if (hasSeg) u.bgDark else 0f)
         finalProg.set1f("uGamma", u.gamma)
         finalProg.set1f("uContrastK", u.contrastK)
         finalProg.set1f("uHighlights", u.highlights)
@@ -329,6 +383,19 @@ class Pipeline {
         finalProg.set1f("uDither", dither)
         finalProg.set2f("uNoiseOffset", noiseX.toFloat(), noiseY.toFloat())
         quad.draw()
+    }
+
+    private fun uploadBytes(rgba: ByteArray, w: Int, h: Int): Int {
+        val ids = IntArray(1)
+        GLES30.glGenTextures(1, ids, 0)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, ids[0])
+        GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 1)
+        GLES30.glTexImage2D(
+            GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA8, w, h, 0,
+            GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, ByteBuffer.wrap(rgba),
+        )
+        setSampling(GLES30.GL_LINEAR)
+        return ids[0]
     }
 
     private fun uploadTexture(bitmap: Bitmap): Int {
@@ -354,6 +421,12 @@ data class Uniforms(
     val even: Float,
     val white: Float,
     val rosy: Float,
+    val eyes: Float,
+    val teeth: Float,
+    val lips: Float,
+    val underEye: Float,
+    val bgBlur: Float,
+    val bgDark: Float,
     val gamma: Float,
     val contrastK: Float,
     val highlights: Float,
@@ -393,6 +466,12 @@ data class Uniforms(
                 even = unit(p.even),
                 white = unit(p.white),
                 rosy = unit(p.rosy),
+                eyes = unit(p.eyes),
+                teeth = unit(p.teeth),
+                lips = bi(p.lips),
+                underEye = unit(p.underEye),
+                bgBlur = unit(p.bgBlur),
+                bgDark = unit(p.bgDark),
                 gamma = 2.0.pow(-0.9 * b).toFloat(),
                 contrastK = if (c >= 0f) 1f + 0.9f * c else 1f / (1f + 0.9f * -c),
                 highlights = bi(p.highlights),

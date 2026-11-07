@@ -56,6 +56,11 @@ android {
         compose = true
     }
 
+    androidResources {
+        // 模型文件不压缩，运行时直接内存映射
+        noCompress += listOf("tflite", "task", "bin")
+    }
+
     lint {
         checkReleaseBuilds = false
         abortOnError = false
@@ -72,4 +77,5 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
+    implementation("com.google.mediapipe:tasks-vision:0.10.20")
 }
