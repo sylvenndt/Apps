@@ -237,7 +237,7 @@ self.onmessage = async e => {
   if(d.type === "run"){
     try{
       // 长录音按 30 秒切块（这几个模型都是英文专用，不用再指定语言）
-      const out = await asr(d.pcm, { chunk_length_s: 30, stride_length_s: 5 });
+      const out = await asr(d.pcm, { chunk_length_s: 30, stride_length_s: 5, language: "en", task: "transcribe" });
       self.postMessage({ type: "text", id: d.id, text: String(out && out.text || "").trim() });
     }
     catch(err){ self.postMessage({ type: "text", id: d.id, error: String(err && err.message || err) }); }
@@ -319,6 +319,8 @@ mig("sttMig24", () => { if(!store.get("sttReady")) Settings.set("sttModel", "lar
 /* 版本 25：最准那个太大、下载太慢，默认改回「标准」（准确度差不了多少，下载和识别都快一半多） */
 mig("sttMig25", () => { if(Settings.get("sttModel") === "large" && !store.get("sttReady")) Settings.set("sttModel", "small"); });
 /* 版本 26：模型换成 ModelScope 上的同名仓库（国内直连 5MB/s），旧的下载记录作废，得重新下一次 */
+/* 版本 28：下载已经走国内源（30 秒下完），默认换成最准的那个，识别准确度优先 */
+mig("sttMig28", () => { if(!store.get("sttReady") && Settings.get("sttModel") === "small") Settings.set("sttModel", "large"); });
 mig("sttMig26", () => {
   const ids = Object.values(STT_MODELS).map(m => m.id);
   if(store.get("sttReady") && ids.indexOf(store.get("sttReady")) < 0) store.del("sttReady");
