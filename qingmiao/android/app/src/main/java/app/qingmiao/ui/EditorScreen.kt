@@ -1,28 +1,36 @@
 package app.qingmiao.ui
 
+import android.graphics.Bitmap
 import android.graphics.ColorSpace
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -37,16 +45,21 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -55,6 +68,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.qingmiao.Analyzer
 import app.qingmiao.EditParams
+import app.qingmiao.Filters
 import app.qingmiao.ImageIO
 import app.qingmiao.SliderSpec
 import app.qingmiao.Tool
@@ -74,16 +88,47 @@ fun EditorScreen(uri: Uri, onBack: () -> Unit) {
     val main = remember { Handler(Looper.getMainLooper()) }
 
     var params by remember { mutableStateOf(EditParams()) }
+    var committed by remember { mutableStateOf(EditParams()) }
+    val undo = remember { mutableStateListOf<EditParams>() }
+    val redo = remember { mutableStateListOf<EditParams>() }
     var auto by remember { mutableStateOf(EditParams()) }
     var tool by remember { mutableStateOf(Tool.AUTO) }
     var loaded by remember { mutableStateOf(false) }
     var showOriginal by remember { mutableStateOf(false) }
     var exporting by remember { mutableStateOf(false) }
     var progress by remember { mutableFloatStateOf(0f) }
+    var preview by remember { mutableStateOf<Bitmap?>(null) }
+    var thumbs by remember { mutableStateOf<Map<String, Bitmap>>(emptyMap()) }
+    val filters = remember { Filters.list(context) }
 
+    /** 只改预览（拖动中）。 */
     fun applyParams(p: EditParams) {
         params = p
         engine.update(p)
+    }
+
+    /** 记入撤销历史。 */
+    fun commit(p: EditParams) {
+        applyParams(p)
+        if (p == committed) return
+        undo.add(committed)
+        if (undo.size > 60) undo.removeAt(0)
+        redo.clear()
+        committed = p
+    }
+
+    fun undoOnce() {
+        if (undo.isEmpty()) return
+        redo.add(committed)
+        committed = undo.removeAt(undo.lastIndex)
+        applyParams(committed)
+    }
+
+    fun redoOnce() {
+        if (redo.isEmpty()) return
+        undo.add(committed)
+        committed = redo.removeAt(redo.lastIndex)
+        applyParams(committed)
     }
 
     BackHandler(enabled = !exporting) { onBack() }
@@ -114,13 +159,28 @@ fun EditorScreen(uri: Uri, onBack: () -> Unit) {
             }
         }
         result.onSuccess { (d, a) ->
+            preview = d.bitmap
             engine.setImage(d.bitmap, d.fullWidth, d.fullHeight, a.faces)
             auto = a.params
-            applyParams(a.params) // 默认 = 一键美化的保守档，什么都不调也能直接发
+            commit(a.params) // 打开就是一键美化
             loaded = true
+            thumbs = withContext(Dispatchers.IO) {
+                runCatching { Filters.thumbnails(context, d.bitmap) }.getOrDefault(emptyMap())
+            }
         }.onFailure {
             Toast.makeText(context, "打不开这张图片", Toast.LENGTH_SHORT).show()
             onBack()
+        }
+    }
+
+    // 滤镜变化（包括撤销/重做带来的变化）时换查找表
+    LaunchedEffect(params.filter) {
+        val id = params.filter
+        if (id == null) {
+            engine.setLut(null)
+        } else {
+            val lut = withContext(Dispatchers.IO) { runCatching { Filters.loadLut(context, id) }.getOrNull() }
+            engine.setLut(lut)
         }
     }
 
@@ -163,13 +223,20 @@ fun EditorScreen(uri: Uri, onBack: () -> Unit) {
                 Modifier
                     .fillMaxWidth()
                     .height(56.dp)
-                    .padding(horizontal = 8.dp),
+                    .padding(horizontal = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TextButton(onClick = onBack, enabled = !exporting) {
                     Text("返回", color = QmColors.Muted, fontSize = 16.sp)
                 }
                 Spacer(Modifier.weight(1f))
+                TextButton(onClick = { undoOnce() }, enabled = undo.isNotEmpty() && !exporting) {
+                    Text("撤销", color = if (undo.isNotEmpty()) QmColors.Ink else QmColors.Track, fontSize = 15.sp)
+                }
+                TextButton(onClick = { redoOnce() }, enabled = redo.isNotEmpty() && !exporting) {
+                    Text("重做", color = if (redo.isNotEmpty()) QmColors.Ink else QmColors.Track, fontSize = 15.sp)
+                }
+                Spacer(Modifier.width(6.dp))
                 Button(
                     onClick = { export() },
                     enabled = loaded && !exporting,
@@ -234,26 +301,43 @@ fun EditorScreen(uri: Uri, onBack: () -> Unit) {
                 Modifier
                     .fillMaxWidth()
                     .background(QmColors.Panel)
-                    .padding(top = 10.dp, bottom = 6.dp)
+                    .padding(top = 8.dp, bottom = 4.dp)
             ) {
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .height(150.dp)
-                        .padding(horizontal = 20.dp),
+                        .height(196.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    if (tool == Tool.AUTO) {
-                        AutoPanel(
+                    when (tool) {
+                        Tool.AUTO -> AutoPanel(
                             params = params,
                             auto = auto,
-                            onAuto = { applyParams(auto) },
-                            onReset = { applyParams(EditParams()) },
+                            onAuto = { commit(auto) },
+                            onReset = { commit(EditParams()) },
                         )
-                    } else {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Tool.FILTER -> FilterPanel(
+                            filters = filters,
+                            thumbs = thumbs,
+                            preview = preview,
+                            params = params,
+                            onPick = { id -> commit(params.copy(filter = id)) },
+                            onStrength = { v -> applyParams(params.copy(filterStrength = v)) },
+                            onDone = { commit(params) },
+                        )
+                        else -> Column(
+                            Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .padding(horizontal = 14.dp, vertical = 4.dp)
+                        ) {
                             for (spec in tool.sliders) {
-                                ParamSlider(spec, spec.get(params)) { v -> applyParams(spec.set(params, v)) }
+                                ParamRow(
+                                    spec = spec,
+                                    value = spec.get(params),
+                                    onChange = { v -> applyParams(spec.set(params, v)) },
+                                    onDone = { commit(params) },
+                                )
                             }
                         }
                     }
@@ -287,13 +371,16 @@ fun EditorScreen(uri: Uri, onBack: () -> Unit) {
 
 @Composable
 private fun AutoPanel(params: EditParams, auto: EditParams, onAuto: () -> Unit, onReset: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.padding(horizontal = 20.dp),
+    ) {
         val status = when {
             params.isOriginal -> "当前是原图"
-            params == auto -> "已一键美化：按这张照片的光线和肤色，只做了最少的调整"
+            params == auto -> "已一键美化：按这张照片的光线、肤色自动调好了"
             else -> "已手动调整"
         }
-        Text(status, color = QmColors.Muted, fontSize = 13.sp)
+        Text(status, color = QmColors.Muted, fontSize = 13.sp, textAlign = TextAlign.Center)
         Spacer(Modifier.height(16.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Button(
@@ -309,41 +396,133 @@ private fun AutoPanel(params: EditParams, auto: EditParams, onAuto: () -> Unit, 
             }
         }
         Spacer(Modifier.height(12.dp))
-        Text("长按照片可以看原图", color = QmColors.Muted, fontSize = 12.sp)
+        Text("长按照片看原图 · 点滑杆右边的数字可以归零", color = QmColors.Muted, fontSize = 12.sp)
     }
 }
 
 @Composable
-private fun ParamSlider(spec: SliderSpec, value: Float, onChange: (Float) -> Unit) {
-    Column {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(spec.label, color = QmColors.Ink, fontSize = 14.sp)
-            Spacer(Modifier.weight(1f))
-            val v = value.roundToInt()
-            val atLimit = value >= spec.max || (spec.min < 0f && value <= spec.min)
+private fun FilterPanel(
+    filters: List<Filters.Filter>,
+    thumbs: Map<String, Bitmap>,
+    preview: Bitmap?,
+    params: EditParams,
+    onPick: (String?) -> Unit,
+    onStrength: (Float) -> Unit,
+    onDone: () -> Unit,
+) {
+    Column(Modifier.fillMaxSize()) {
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(top = 6.dp),
+        ) {
+            item {
+                FilterItem("原片", preview, params.filter == null) { onPick(null) }
+            }
+            items(filters, key = { it.id }) { f ->
+                FilterItem(f.name, thumbs[f.id], params.filter == f.id) { onPick(f.id) }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        if (params.filter != null) {
+            Box(Modifier.padding(horizontal = 14.dp)) {
+                ParamRow(
+                    spec = SliderSpec("强度", 0f, 100f, { it.filterStrength }, { p, v -> p.copy(filterStrength = v) }),
+                    value = params.filterStrength,
+                    onChange = onStrength,
+                    onDone = onDone,
+                    resetTo = 80f,
+                )
+            }
+        } else {
             Text(
-                text = when {
-                    atLimit -> "$v · 已到上限"
-                    v > 0 && spec.min < 0f -> "+$v"
-                    else -> "$v"
-                },
-                color = if (atLimit) QmColors.Primary else QmColors.Muted,
-                fontSize = 13.sp,
-                // 点数值归零
-                modifier = Modifier
-                    .clickable { onChange(0f) }
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                "选一个滤镜试试；人像滤镜会自动避开肤色",
+                color = QmColors.Muted,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             )
         }
+    }
+}
+
+@Composable
+private fun FilterItem(name: String, thumb: Bitmap?, selected: Boolean, onClick: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .width(66.dp)
+            .clickable(onClick = onClick),
+    ) {
+        Box(
+            Modifier
+                .size(62.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(QmColors.PanelHigh)
+                .border(
+                    width = if (selected) 2.dp else 0.dp,
+                    color = if (selected) QmColors.Primary else Color.Transparent,
+                    shape = RoundedCornerShape(10.dp),
+                )
+        ) {
+            if (thumb != null) {
+                Image(
+                    bitmap = thumb.asImageBitmap(),
+                    contentDescription = name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            name,
+            fontSize = 12.sp,
+            color = if (selected) QmColors.Primary else QmColors.Muted,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun ParamRow(
+    spec: SliderSpec,
+    value: Float,
+    onChange: (Float) -> Unit,
+    onDone: () -> Unit,
+    resetTo: Float = 0f,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(46.dp),
+    ) {
+        Text(spec.label, color = QmColors.Ink, fontSize = 14.sp, modifier = Modifier.width(66.dp))
         Slider(
             value = value,
             onValueChange = { onChange(it.roundToInt().toFloat()) },
+            onValueChangeFinished = onDone,
             valueRange = spec.min..spec.max,
             colors = SliderDefaults.colors(
                 thumbColor = QmColors.Primary,
                 activeTrackColor = QmColors.Primary,
                 inactiveTrackColor = QmColors.Track,
             ),
+            modifier = Modifier.weight(1f),
+        )
+        val v = value.roundToInt()
+        Text(
+            text = if (v > 0 && spec.min < 0f) "+$v" else "$v",
+            color = if (v != resetTo.roundToInt()) QmColors.Primary else QmColors.Muted,
+            fontSize = 13.sp,
+            textAlign = TextAlign.End,
+            modifier = Modifier
+                .width(44.dp)
+                .clickable {
+                    onChange(resetTo)
+                    onDone()
+                }
+                .padding(vertical = 8.dp),
         )
     }
 }
@@ -354,8 +533,8 @@ private fun ToolTabs(selected: Tool, onSelect: (Tool) -> Unit) {
         Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 10.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         for (t in Tool.entries) {
             val on = t == selected

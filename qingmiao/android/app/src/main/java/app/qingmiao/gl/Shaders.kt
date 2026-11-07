@@ -163,16 +163,38 @@ uniform sampler2D uA0;
 uniform sampler2D uA1;
 uniform sampler2D uA2;
 uniform sampler2D uB0;
+uniform sampler2D uLut;
 uniform vec2 uTexel;
-uniform float uSigma;
+uniform float uSigma1;     // 细纹理带（全分辨率约 1.4 px）
+uniform float uSigma2;     // 锐化半径（全分辨率约 2 px）
 uniform int uRadius;
+// 人像
 uniform float uSmooth;
+uniform float uSmoothFine;
 uniform float uEven;
-uniform float uSkinBright;
+uniform float uWhite;
+uniform float uRosy;
+// 光影
 uniform float uGamma;
 uniform float uContrastK;
-uniform float uClarity;
+uniform float uHighlights;
+uniform float uShadows;
+// 色彩
 uniform vec3 uWb;
+uniform float uSaturation;
+uniform float uVibrance;
+// 细节
+uniform float uClarity;
+uniform float uSharpen;
+uniform float uDehaze;
+// 效果
+uniform float uVignette;
+uniform float uAspect;
+uniform float uGrain;
+uniform vec2 uGrainScale;
+uniform float uFilter;
+uniform float uFilterSkin;
+uniform int uFilterOn;
 uniform int uOriginal;
 uniform float uDither;
 uniform vec2 uNoiseOffset;
@@ -198,6 +220,26 @@ float hash(vec2 p) {
     p3 += dot(p3, p3.yzx + 33.33);
     return fract((p3.x + p3.y) * p3.z);
 }
+float vnoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash(i);
+    float b = hash(i + vec2(1.0, 0.0));
+    float c = hash(i + vec2(0.0, 1.0));
+    float d = hash(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+// 512×512 查找表（8×8 格，每格 64×64），第 0 行在图片顶部
+vec3 applyLut(vec3 c) {
+    float bz = c.b * 63.0;
+    float b0 = floor(bz);
+    float b1 = min(b0 + 1.0, 63.0);
+    vec2 inner = (c.rg * 63.0 + 0.5) / 512.0;
+    vec2 t0 = vec2(mod(b0, 8.0), floor(b0 / 8.0)) / 8.0;
+    vec2 t1 = vec2(mod(b1, 8.0), floor(b1 / 8.0)) / 8.0;
+    return mix(texture(uLut, t0 + inner).rgb, texture(uLut, t1 + inner).rgb, bz - b0);
+}
 
 void main() {
     vec3 c = texture(uSrc, vUv).rgb;
@@ -209,47 +251,63 @@ void main() {
     float cb = (c.b - y) * 0.564;
     float cr = (c.r - y) * 0.713;
 
-    // 细纹理带：σ 以「全分辨率像素」定义，预览时按比例缩小，所以预览≈导出的缩小版
-    vec3 g = c;
+    // 一次取样同时算两个高斯：g1 = 细纹理带，g2 = 锐化用
+    vec3 g1 = c;
+    vec3 g2 = c;
     if (uRadius > 0) {
-        vec3 acc = vec3(0.0);
-        float wsum = 0.0;
-        float k = -0.5 / (uSigma * uSigma);
+        vec3 a1 = vec3(0.0);
+        vec3 a2 = vec3(0.0);
+        float w1s = 0.0;
+        float w2s = 0.0;
+        float k1 = -0.5 / (uSigma1 * uSigma1);
+        float k2 = -0.5 / (uSigma2 * uSigma2);
         for (int j = -uRadius; j <= uRadius; j++) {
             for (int i = -uRadius; i <= uRadius; i++) {
-                float w = exp(float(i * i + j * j) * k);
-                acc += w * texture(uSrc, vUv + vec2(float(i), float(j)) * uTexel).rgb;
-                wsum += w;
+                float d2 = float(i * i + j * j);
+                vec3 s = texture(uSrc, vUv + vec2(float(i), float(j)) * uTexel).rgb;
+                float w1 = exp(d2 * k1);
+                float w2 = exp(d2 * k2);
+                a1 += w1 * s;
+                a2 += w2 * s;
+                w1s += w1;
+                w2s += w2;
             }
         }
-        g = acc / wsum;
+        g1 = a1 / w1s;
+        g2 = a2 / w2s;
     }
-    float gy = dot(g, W601);
-    float gcb = (g.b - gy) * 0.564;
-    float gcr = (g.r - gy) * 0.713;
+    float g1y = dot(g1, W601);
+    float g1cb = (g1.b - g1y) * 0.564;
+    float g1cr = (g1.r - g1y) * 0.713;
+    float g2y = dot(g2, W601);
 
     float yc = y - 0.5;
     vec4 a0 = texture(uA0, vUv);
-    vec4 a1 = texture(uA1, vUv);
+    vec4 a1v = texture(uA1, vUv);
     float gate = clamp(texture(uA2, vUv).r, 0.0, 1.0);
     float baseY = a0.x * yc + a0.y + 0.5;
     float baseCb = a0.z * yc + a0.w;
-    float baseCr = a1.x * yc + a1.y;
-    float skin = clamp(a1.z * yc + a1.w, 0.0, 1.0) * gate;
+    float baseCr = a1v.x * yc + a1v.y;
+    float skin = clamp(a1v.z * yc + a1v.w, 0.0, 1.0) * gate;
 
-    // 1. 磨皮：只去掉「细纹理 ~ 底色」之间的中频（瑕疵、不平），细纹理（毛孔）原样保留；
-    //    偏离很大的点（痣、疤、眼睛、鼻孔）自动保护。
-    float midY = gy - baseY;
-    float protY = 1.0 - smoothstep(0.05, 0.12, abs(midY));
+    // —— 人像（sRGB 编码域的 YCbCr）——
+    // 磨皮：去掉「细纹理 ~ 底色」之间的中频（痘印、不平、细纹），反差很大的点（痣、疤、五官）保护
+    float midY = g1y - baseY;
+    float protY = 1.0 - smoothstep(0.07, 0.18, abs(midY));
     float y2 = y - uSmooth * skin * protY * midY;
-
-    // 2. 肤色均匀：同样只动中频的色度（泛红、色斑），不动亮度纹理
-    vec2 midC = vec2(gcb - baseCb, gcr - baseCr);
-    float protC = 1.0 - smoothstep(0.03, 0.08, length(midC));
+    // 磨皮拉高时，细纹理也稍微收一点（最多 30%），毛孔仍然在
+    y2 -= uSmoothFine * skin * (y - g1y);
+    // 肤色均匀：去掉中频的色度（泛红、色斑）
+    vec2 midC = vec2(g1cb - baseCb, g1cr - baseCr);
+    float protC = 1.0 - smoothstep(0.05, 0.12, length(midC));
     vec2 c2 = vec2(cb, cr) - uEven * skin * protC * midC;
-
-    // 3. 肤色提亮：只在皮肤上，越亮提得越少，不会提白
-    y2 += uSkinBright * 0.08 * skin * (1.0 - y2) * smoothstep(0.04, 0.25, y2);
+    // 美白：皮肤提亮 + 稍微去黄
+    y2 += uWhite * 0.22 * skin * (1.0 - y2) * smoothstep(0.04, 0.25, y2);
+    c2 *= 1.0 - uWhite * 0.18 * skin;
+    // 气色：皮肤稍微偏粉
+    c2 += uRosy * skin * vec2(-0.006, 0.032);
+    // 锐化（只在亮度上，皮肤上减弱，限幅防白边）
+    y2 += uSharpen * clamp(y - g2y, -0.12, 0.12) * (1.0 - 0.6 * skin);
 
     vec3 e;
     e.r = y2 + c2.y / 0.713;
@@ -259,27 +317,52 @@ void main() {
 
     // —— 线性光 ——
     vec3 lin = toLinear(e) * uWb;
+    float y0 = dot(lin, W709);
+    float satE = max(e.r, max(e.g, e.b)) - min(e.r, min(e.g, e.b));
+    float satAmt = uSaturation * (uSaturation > 0.0 ? 1.0 - 0.4 * skin : 1.0);
+    float vib = uVibrance * (1.0 - clamp(satE * 1.6, 0.0, 1.0)) * (uVibrance > 0.0 ? 1.0 - 0.5 * skin : 1.0);
+    float dehazeSat = uDehaze > 0.0 ? 0.25 * uDehaze : 0.6 * uDehaze;
+    lin = max(mix(vec3(y0), lin, 1.0 + satAmt + vib + dehazeSat), 0.0);
+
     float yl = max(dot(lin, W709), 1e-6);
     float L = toSrgb1(min(yl, 1.0));
 
-    // 4. 清晰度：大半径、保边的局部对比，只作用中间调，皮肤上减弱
+    // 大尺度保边底图（清晰度、高光阴影、去雾都用它）
     vec4 b0 = texture(uB0, vUv);
-    float baseL = b0.x * yc + b0.y + 0.5;
-    float detail = y - baseL;
-    L += uClarity * detail * 4.0 * L * (1.0 - L) * (1.0 - 0.6 * skin);
+    float Lb = clamp(b0.x * yc + b0.y + 0.5, 0.0, 1.0);
+    float detail = y - Lb;
+    float mid = 4.0 * L * (1.0 - L);
+    L += (uClarity + 0.6 * max(uDehaze, 0.0)) * detail * mid * (1.0 - 0.5 * skin);
+    // 阴影 / 高光：按所在区域的明暗来调，细节保留
+    float wS = 1.0 - smoothstep(0.0, 0.6, Lb);
+    float wH = smoothstep(0.4, 1.0, Lb);
+    L += uShadows * 0.32 * wS * (uShadows > 0.0 ? 2.0 * L * (1.0 - L) : L * (1.0 - L) * 1.6);
+    L += uHighlights * 0.30 * wH * (uHighlights > 0.0 ? 2.0 * L * (1.0 - L) : L * L);
+    // 去雾：压低被雾抬起的黑位；负值 = 加一层柔雾
+    if (uDehaze > 0.0) {
+        float bp = 0.10 * uDehaze * (1.0 - Lb);
+        L = (L - bp) / (1.0 - bp);
+    } else {
+        L = mix(L, 0.72, -uDehaze * 0.28);
+    }
     L = clamp(L, 0.0, 1.0);
-
-    // 5. 亮度：伽马曲线，黑白两端固定不动 → 不会死黑、不会死白
+    // 亮度：伽马曲线，黑白两端固定 → 不会死黑、死白
     L = pow(L, uGamma);
-    // 6. 对比：以 0.46 为支点的两段幂曲线，两端同样固定
+    // 对比：以 0.46 为支点的两段幂曲线
     const float P = 0.46;
     if (L < P) {
         L = P * pow(L / P, uContrastK);
     } else {
         L = 1.0 - (1.0 - P) * pow((1.0 - L) / (1.0 - P), uContrastK);
     }
-
     lin *= toLinear1(L) / yl;
+
+    // 暗角（负值 = 四周提亮）
+    vec2 q = (vUv - 0.5) * vec2(uAspect, 1.0);
+    float r = length(q) / length(vec2(uAspect, 1.0) * 0.5);
+    float vw = smoothstep(0.3, 1.0, r);
+    lin *= max(0.0, 1.0 - uVignette * 0.7 * vw * vw);
+
     float mx = max(lin.r, max(lin.g, lin.b));
     if (mx > 1.0) {
         float yy = dot(lin, W709);
@@ -290,6 +373,18 @@ void main() {
         }
     }
     vec3 outc = toSrgb(clamp(lin, 0.0, 1.0));
+
+    // 滤镜（皮肤上减弱一点，避免把肤色带偏）
+    if (uFilterOn == 1) {
+        outc = mix(outc, applyLut(clamp(outc, 0.0, 1.0)), uFilter * (1.0 - uFilterSkin * skin));
+    }
+    // 颗粒：颗粒大小按原图像素定义，预览和导出一致
+    if (uGrain > 0.0) {
+        vec2 gp = vUv * uGrainScale;
+        float gn = vnoise(gp) + vnoise(gp * 1.93 + 17.0) - 1.0;
+        float lum = dot(outc, W601);
+        outc += uGrain * 0.09 * gn * (0.35 + 2.6 * lum * (1.0 - lum));
+    }
     vec2 px = gl_FragCoord.xy + uNoiseOffset;
     float n = hash(px) + hash(px + vec2(17.13, 41.7)) - 1.0;
     outc += n * uDither / 255.0;

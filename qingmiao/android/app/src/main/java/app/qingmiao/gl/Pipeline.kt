@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.opengl.GLES30
 import android.opengl.GLUtils
 import app.qingmiao.EditParams
+import app.qingmiao.Filters
 import java.nio.ByteBuffer
 import kotlin.math.ceil
 import kotlin.math.exp
@@ -39,8 +40,11 @@ class Pipeline {
     var srcHeight = 0
         private set
 
-    /** 原图（全分辨率）的长边，用来把细纹理 σ 定义在全分辨率像素上。 */
+    /** 原图（全分辨率）尺寸：细纹理 σ、锐化半径、颗粒大小都按全分辨率像素定义，预览按比例换算。 */
     private var fullLong = 0
+    private var fullW = 0
+    private var fullH = 0
+    private var lutTex = 0
 
     private val maps = ArrayList<RenderTarget>()
     private var coefA: RenderTarget? = null
@@ -60,12 +64,21 @@ class Pipeline {
         srcWidth = bitmap.width
         srcHeight = bitmap.height
         fullLong = max(fullWidth, fullHeight)
+        fullW = fullWidth
+        fullH = fullHeight
         computeMaps(faces)
         preview = RenderTarget.rgba8(srcWidth, srcHeight, GLES30.GL_LINEAR_MIPMAP_LINEAR)
         previewDirty = true
     }
 
     fun invalidate() {
+        previewDirty = true
+    }
+
+    /** 换滤镜查找表（512×512）；null = 无滤镜。 */
+    fun setLut(bitmap: Bitmap?) {
+        if (lutTex != 0) GLES30.glDeleteTextures(1, intArrayOf(lutTex), 0)
+        lutTex = if (bitmap == null) 0 else uploadTexture(bitmap)
         previewDirty = true
     }
 
@@ -151,6 +164,8 @@ class Pipeline {
 
     fun release() {
         releaseImage()
+        if (lutTex != 0) GLES30.glDeleteTextures(1, intArrayOf(lutTex), 0)
+        lutTex = 0
         prep.release(); down.release(); box.release(); coef.release(); finalProg.release(); display.release()
         quad.release()
     }
@@ -187,11 +202,11 @@ class Pipeline {
         prep.set4fv("uFaces", faceCount, faces)
         quad.draw()
 
-        val ra = max(2, (max(ww, wh) * 0.0055f).roundToInt())
+        val ra = max(2, (max(ww, wh) * 0.008f).roundToInt())
         val meanA = boxFilter(prepT, 2, ra)
         // 纹理门：有人脸定位时只挡住五官这类强结构；没有人脸时更严，挡住头发、织物等一切有纹理的区域
         val gate = if (faceCount > 0) floatArrayOf(0.004f, 0.015f) else floatArrayOf(0.0012f, 0.0045f)
-        coefA = coefficients(meanA, epsY = 0.0016f, epsC = 0.0016f, epsM = 0.01f, ra = ra, gate = gate)
+        coefA = coefficients(meanA, epsY = 0.003f, epsC = 0.003f, epsM = 0.01f, ra = ra, gate = gate)
 
         // 级别 B：清晰度用的大尺度底图
         val bw = max(1, ww / 4)
@@ -274,22 +289,42 @@ class Pipeline {
         finalProg.texture("uA2", 3, a.tex(2))
         finalProg.texture("uB0", 4, b.tex(0))
         finalProg.set2f("uTexel", 1f / texW, 1f / texH)
+        finalProg.texture("uLut", 5, if (lutTex != 0) lutTex else tex)
 
-        // 细纹理 σ：全分辨率下约 1.4 px（按 4000 px 长边），换算到当前纹理
-        val sigmaFull = max(0.6f, 1.4f * fullLong / 4000f)
-        val sigma = sigmaFull * max(texW, texH) / fullLong.toFloat()
-        val radius = if (sigma < 0.35f) 0 else min(4, ceil(2f * sigma).toInt())
-        finalProg.set1f("uSigma", max(sigma, 0.35f))
+        // 细纹理带 σ1 ≈ 1.4 px、锐化 σ2 ≈ 2 px（按 4000 px 长边的全分辨率），换算到当前纹理
+        val scale = max(texW, texH) / fullLong.toFloat()
+        val s1 = max(0.6f, 1.4f * fullLong / 4000f) * scale
+        val s2 = (fullLong / 2000f).coerceIn(1f, 2.5f) * scale
+        val sm = max(s1, s2)
+        val radius = if (sm < 0.35f) 0 else min(4, ceil(2f * sm).toInt())
+        finalProg.set1f("uSigma1", max(s1, 0.35f))
+        finalProg.set1f("uSigma2", max(s2, 0.35f))
         finalProg.set1i("uRadius", radius)
 
         val u = Uniforms.from(params)
         finalProg.set1f("uSmooth", u.smooth)
+        finalProg.set1f("uSmoothFine", u.smoothFine)
         finalProg.set1f("uEven", u.even)
-        finalProg.set1f("uSkinBright", u.skinBright)
+        finalProg.set1f("uWhite", u.white)
+        finalProg.set1f("uRosy", u.rosy)
         finalProg.set1f("uGamma", u.gamma)
         finalProg.set1f("uContrastK", u.contrastK)
-        finalProg.set1f("uClarity", u.clarity)
+        finalProg.set1f("uHighlights", u.highlights)
+        finalProg.set1f("uShadows", u.shadows)
         finalProg.set3f("uWb", u.wbR, u.wbG, u.wbB)
+        finalProg.set1f("uSaturation", u.saturation)
+        finalProg.set1f("uVibrance", u.vibrance)
+        finalProg.set1f("uClarity", u.clarity)
+        finalProg.set1f("uSharpen", u.sharpen)
+        finalProg.set1f("uDehaze", u.dehaze)
+        finalProg.set1f("uVignette", u.vignette)
+        finalProg.set1f("uAspect", fullW.toFloat() / max(1, fullH))
+        finalProg.set1f("uGrain", u.grain)
+        val cell = max(1.5f, fullLong / 1500f)
+        finalProg.set2f("uGrainScale", fullW / cell, fullH / cell)
+        finalProg.set1f("uFilter", u.filter)
+        finalProg.set1f("uFilterSkin", if (Filters.isMono(params.filter)) 0f else 0.3f)
+        finalProg.set1i("uFilterOn", if (lutTex != 0 && u.filter > 0f) 1 else 0)
         finalProg.set1i("uOriginal", if (original) 1 else 0)
         finalProg.set1f("uDither", dither)
         finalProg.set2f("uNoiseOffset", noiseX.toFloat(), noiseY.toFloat())
@@ -312,37 +347,66 @@ class Pipeline {
     }
 }
 
-/** 滑杆数值 → 着色器参数。所有硬上限都在这里。 */
+/** 滑杆数值 → 着色器参数。所有强度上限都在这里。 */
 data class Uniforms(
     val smooth: Float,
+    val smoothFine: Float,
     val even: Float,
-    val skinBright: Float,
+    val white: Float,
+    val rosy: Float,
     val gamma: Float,
     val contrastK: Float,
-    val clarity: Float,
+    val highlights: Float,
+    val shadows: Float,
     val wbR: Float,
     val wbG: Float,
     val wbB: Float,
+    val saturation: Float,
+    val vibrance: Float,
+    val clarity: Float,
+    val sharpen: Float,
+    val dehaze: Float,
+    val vignette: Float,
+    val grain: Float,
+    val filter: Float,
 ) {
     companion object {
+        private fun unit(v: Float) = (v / 100f).coerceIn(0f, 1f)
+        private fun bi(v: Float) = (v / 100f).coerceIn(-1f, 1f)
+
         fun from(p: EditParams): Uniforms {
-            val smooth = 0.75f * (p.smooth / 100f).coerceIn(0f, 1f)
-            val even = 0.8f * (p.even / 100f).coerceIn(0f, 1f)
-            val bright = (p.skinBright / 100f).coerceIn(0f, 1f)
-            val b = (p.brightness / 100f).coerceIn(-1f, 1f)
-            val gamma = 2.0.pow(-0.55 * b).toFloat()
-            val c = (p.contrast / 100f).coerceIn(-1f, 1f)
-            val k = if (c >= 0f) 1f + 0.5f * c else 1f / (1f + 0.5f * -c)
-            val clarity = 0.5f * (p.clarity / 100f).coerceIn(-1f, 1f)
-            val t = (p.temperature / 100f).coerceIn(-1f, 1f)
-            val tint = (p.tint / 100f).coerceIn(-1f, 1f)
-            var r = exp(0.10f * t)
-            var g = exp(-0.07f * tint)
-            var bl = exp(-0.10f * t)
+            val smooth = unit(p.smooth)
+            val b = bi(p.brightness)
+            val c = bi(p.contrast)
+            val t = bi(p.temperature)
+            val tint = bi(p.tint)
+            var r = exp(0.22f * t)
+            var g = exp(-0.15f * tint)
+            var bl = exp(-0.22f * t)
             // 归一化：中性灰的亮度保持不变，色温色调只改颜色不改明暗
             val y = 0.2126f * r + 0.7152f * g + 0.0722f * bl
             r /= y; g /= y; bl /= y
-            return Uniforms(smooth, even, bright, gamma, k, clarity, r, g, bl)
+            val sat = bi(p.saturation)
+            return Uniforms(
+                smooth = smooth,
+                smoothFine = 0.3f * ((smooth - 0.5f) / 0.5f).coerceIn(0f, 1f),
+                even = unit(p.even),
+                white = unit(p.white),
+                rosy = unit(p.rosy),
+                gamma = 2.0.pow(-0.9 * b).toFloat(),
+                contrastK = if (c >= 0f) 1f + 0.9f * c else 1f / (1f + 0.9f * -c),
+                highlights = bi(p.highlights),
+                shadows = bi(p.shadows),
+                wbR = r, wbG = g, wbB = bl,
+                saturation = if (sat > 0f) 0.8f * sat else sat,
+                vibrance = 0.9f * bi(p.vibrance),
+                clarity = bi(p.clarity),
+                sharpen = 1.5f * unit(p.sharpen),
+                dehaze = bi(p.dehaze),
+                vignette = bi(p.vignette),
+                grain = unit(p.grain),
+                filter = if (p.filter == null) 0f else unit(p.filterStrength),
+            )
         }
     }
 }

@@ -1,0 +1,122 @@
+[
+ {
+  "id": "clear",
+  "name": "清透",
+  "group": "日常"
+ },
+ {
+  "id": "cream",
+  "name": "奶油",
+  "group": "日常"
+ },
+ {
+  "id": "sunny",
+  "name": "暖阳",
+  "group": "日常"
+ },
+ {
+  "id": "coolwhite",
+  "name": "冷白",
+  "group": "日常"
+ },
+ {
+  "id": "vivid",
+  "name": "鲜明",
+  "group": "日常"
+ },
+ {
+  "id": "soft",
+  "name": "柔光",
+  "group": "日常"
+ },
+ {
+  "id": "natural",
+  "name": "自然肤",
+  "group": "人像"
+ },
+ {
+  "id": "pink",
+  "name": "粉调",
+  "group": "人像"
+ },
+ {
+  "id": "japan",
+  "name": "日系",
+  "group": "人像"
+ },
+ {
+  "id": "hk",
+  "name": "港风",
+  "group": "人像"
+ },
+ {
+  "id": "portra",
+  "name": "胶片人像",
+  "group": "人像"
+ },
+ {
+  "id": "korea",
+  "name": "韩系",
+  "group": "人像"
+ },
+ {
+  "id": "forest",
+  "name": "森林",
+  "group": "风景"
+ },
+ {
+  "id": "ocean",
+  "name": "海岸",
+  "group": "风景"
+ },
+ {
+  "id": "dusk",
+  "name": "黄昏",
+  "group": "风景"
+ },
+ {
+  "id": "city",
+  "name": "城市",
+  "group": "风景"
+ },
+ {
+  "id": "sky",
+  "name": "晴空",
+  "group": "风景"
+ },
+ {
+  "id": "fuji",
+  "name": "胶片绿",
+  "group": "胶片"
+ },
+ {
+  "id": "faded",
+  "name": "褪色",
+  "group": "胶片"
+ },
+ {
+  "id": "tealorange",
+  "name": "青橙",
+  "group": "胶片"
+ },
+ {
+  "id": "retro",
+  "name": "复古",
+  "group": "胶片"
+ },
+ {
+  "id": "bw",
+  "name": "黑白",
+  "group": "黑白"
+ },
+ {
+  "id": "bwsoft",
+  "name": "高调黑白",
+  "group": "黑白"
+ },
+ {
+  "id": "noir",
+  "name": "浓墨",
+  "group": "黑白"
+ }
+]

@@ -38,6 +38,7 @@ class EditorEngine(context: Context) : GLSurfaceView.Renderer {
     private var fullW = 0
     private var fullH = 0
     private var faces = FloatArray(0)
+    private var lut: Bitmap? = null
     private var viewW = 1
     private var viewH = 1
     private var renderedParams: EditParams? = null
@@ -57,6 +58,20 @@ class EditorEngine(context: Context) : GLSurfaceView.Renderer {
             fullH = fullHeight
             faces = faceEllipses
             loadSource()
+        }
+        view.requestRender()
+    }
+
+    /** 换滤镜查找表；null = 不用滤镜。 */
+    fun setLut(bitmap: Bitmap?) {
+        view.queueEvent {
+            try {
+                pipeline?.setLut(bitmap)
+                lut = bitmap
+                renderedParams = null
+            } catch (e: Exception) {
+                report(e)
+            }
         }
         view.requestRender()
     }
@@ -144,6 +159,7 @@ class EditorEngine(context: Context) : GLSurfaceView.Renderer {
         val pl = pipeline ?: return
         try {
             pl.setPreview(bmp, fullW, fullH, faces)
+            lut?.let { pl.setLut(it) }
             renderedParams = null
         } catch (e: Exception) {
             report(e)

@@ -63,42 +63,56 @@ object Analyzer {
         val p05 = percentile(hist, total, 0.05f)
         val p95 = percentile(hist, total, 0.95f)
 
-        // 亮度：中间调太暗/太亮才动，而且只补一半，保留原本的明暗气氛
+        val p10 = percentile(hist, total, 0.10f)
+        val p98 = percentile(hist, total, 0.98f)
+
+        // 亮度：把中间调往 0.48 拉，纠正 70%（保留一点原本的明暗气氛）
         var brightness = 0f
-        if (median < 0.38f || median > 0.66f) {
-            val target = if (median < 0.38f) 0.44f else 0.60f
+        run {
             val m = median.coerceIn(0.03f, 0.97f)
-            val gamma = ln(target) / ln(m)                    // L' = L^gamma
-            val b = (-ln(gamma) / ln(2f) / 0.55f) * 0.5f       // 与 Uniforms 里 gamma = 2^(-0.55 b) 对应
-            brightness = (b * 100f).coerceIn(-30f, 30f)
+            val target = 0.48f
+            if (kotlin.math.abs(m - target) > 0.04f) {
+                val gamma = ln(target) / ln(m)                    // L' = L^gamma
+                val b = -ln(gamma) / ln(2f) / 0.9f                // 与 Uniforms 里 gamma = 2^(-0.9 b) 对应
+                brightness = (b * 0.7f * 100f).coerceIn(-45f, 45f)
+            }
         }
 
-        // 对比：只在照片明显发灰时轻轻加一点
+        // 对比：发灰的照片多加，正常的也给一点通透
         val spread = p95 - p05
-        val contrast = if (spread < 0.55f) ((0.55f - spread) * 60f).coerceIn(0f, 15f) else 0f
+        val contrast = if (spread < 0.6f) ((0.6f - spread) * 80f + 8f).coerceIn(8f, 28f) else 8f
+        // 高光快溢出就压一点，暗部大片发黑就提一点
+        val highlights = if (p98 > 0.96f) -25f else if (p98 > 0.9f) -10f else 0f
+        val shadows = if (p10 < 0.08f) 25f else if (p10 < 0.15f) 12f else 0f
 
-        // 白平衡：灰世界估计偏色，只纠正 30%（室内暖光不会被硬扳成冷白）
+        // 白平衡：灰世界估计偏色，纠正 50%（室内暖光不会被硬扳成冷白）
         var temperature = 0f
         var tint = 0f
         if (n > 50) {
             val r = sr / n; val g = sg / n; val b = sb / n
             val warm = ln(r / b).toFloat()                       // >0 偏暖
             val green = ln(g / sqrt(r * b)).toFloat()            // >0 偏绿
-            temperature = (-0.3f * warm / 0.20f * 100f).coerceIn(-25f, 25f)
-            tint = (0.3f * green / 0.07f * 100f).coerceIn(-20f, 20f)
+            temperature = (-0.5f * warm / 0.44f * 100f).coerceIn(-40f, 40f)
+            tint = (0.5f * green / 0.15f * 100f).coerceIn(-30f, 30f)
         }
 
-        // 检测不到人脸就不自动磨皮（宁可少改）；用户仍然可以手动拉滑杆
-        val hasPeople = faces.isNotEmpty()
+        // 有人脸：正常人像档；没检测到人脸但有大片肤色：轻一点；都没有：不动皮肤
+        val portrait = faces.isNotEmpty()
+        val maybePeople = !portrait && skinRatio > 0.03f
         val params = EditParams(
-            smooth = if (hasPeople) 35f else 0f,
-            even = if (hasPeople) 30f else 0f,
-            skinBright = if (hasPeople) 20f else 0f,
+            smooth = if (portrait) 55f else if (maybePeople) 35f else 0f,
+            even = if (portrait) 45f else if (maybePeople) 30f else 0f,
+            white = if (portrait) 30f else if (maybePeople) 20f else 0f,
+            rosy = if (portrait) 12f else 0f,
             brightness = brightness.round1(),
             contrast = contrast.round1(),
+            highlights = highlights,
+            shadows = shadows,
+            vibrance = 15f,
             temperature = temperature.round1(),
             tint = tint.round1(),
-            clarity = if (hasPeople) 10f else 20f,
+            clarity = if (portrait) 12f else 25f,
+            sharpen = if (portrait) 20f else 30f,
         )
         return Result(params, skinRatio, faces)
     }
