@@ -2,8 +2,8 @@
 /* AI 批改用的大模型：DeepSeek 或 Claude（Anthropic）。
    口语教练、看中文说英文的语法纠错、测试连接都走 AI.chat()。 */
 const DS_MODELS = [
-  ["deepseek-v4-flash", "DeepSeek V4 Flash（推荐，快又便宜）"],
-  ["deepseek-v4-pro", "DeepSeek V4 Pro（批改更细，贵一些）"]
+  ["deepseek-flash", "DeepSeek Flash（推荐，快又便宜）"],
+  ["deepseek-v4-pro", "DeepSeek Pro（批改更细，贵一些）"]
 ];
 const DS_PROXY_CODE = `export default {
   async fetch(req) {
@@ -82,3 +82,5 @@ const AI = {
 };
 /* 之前只填过 Claude 密钥的，继续用 Claude */
 if(!store.get("aiMig20")){ if(Settings.get("apiKey") && !Settings.get("dsKey")) Settings.set("aiProvider", "claude"); store.set("aiMig20", true); }
+/* DeepSeek 官方的模型名改了：deepseek-v4-flash → deepseek-flash（旧名字还能用，但换成新名字） */
+if(!store.get("aiMig23")){ if(Settings.get("dsModel") === "deepseek-v4-flash") Settings.set("dsModel", "deepseek-flash"); store.set("aiMig23", true); }
