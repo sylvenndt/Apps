@@ -102,7 +102,7 @@ public class MainActivity extends Activity {
                 if (!pageLoadedOnce && url != null && url.startsWith(WebFiles.ORIGIN)) {
                     pageLoadedOnce = true;
                     // 页面起来以后再去后台加载识别模型和检查新版页面，不跟页面抢资源
-                    ui.postDelayed(() -> Asr.load(getAssets()), 800);
+                    ui.postDelayed(() -> Asr.load(getApplicationContext()), 800);
                     ui.postDelayed(MainActivity.this::checkUpdate, 4000);
                 }
             }
@@ -266,16 +266,17 @@ public class MainActivity extends Activity {
         @JavascriptInterface public String state() { return Asr.state(); }
         @JavascriptInterface public String name() { return Asr.NAME; }
         @JavascriptInterface public long loadMs() { return Asr.loadMs(); }
-        @JavascriptInterface public void load() { Asr.load(getAssets()); }
+        @JavascriptInterface public long unpackMs() { return Asr.unpackMs(); }
+        @JavascriptInterface public void load() { Asr.load(getApplicationContext()); }
         /** 识别刚才录的那段 */
-        @JavascriptInterface public int recognizeLast() { return Asr.submit(getAssets(), recorder.samples()); }
+        @JavascriptInterface public int recognizeLast() { return Asr.submit(getApplicationContext(), recorder.samples()); }
         /** 识别页面传来的声音（16kHz 16 位小端 PCM 的 base64），比如用 getUserMedia 录的或上传的文件 */
         @JavascriptInterface
         public int recognizePcm(String b64) {
             byte[] b = Base64.decode(b64 == null ? "" : b64, Base64.DEFAULT);
             short[] p = new short[b.length / 2];
             ByteBuffer.wrap(b).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(p);
-            return Asr.submit(getAssets(), p);
+            return Asr.submit(getApplicationContext(), p);
         }
         /** 还没好返回空字符串；好了返回 {"text":..,"ms":..} 或 {"error":..} */
         @JavascriptInterface public String job(int id) { return Asr.job(id); }

@@ -110,8 +110,9 @@ async function first(c0){
   fs.writeFileSync(`${outDir}/kept.txt`, kept);
 
   // 识别模型加载
-  const t0 = Date.now(); let st = "";
-  for(let i = 0; i < 240; i++){ st = await c.eval(`return DSHASR.state()`); if(st === "ready" || st.startsWith("error")) break; await sleep(1000); }
+  const t0 = Date.now(); let st = "", seen = new Set();
+  for(let i = 0; i < 300; i++){ st = await c.eval(`return DSHASR.state()`); seen.add(st.replace(/:\d+$/, "")); if(st === "ready" || st.startsWith("error")) break; await sleep(1000); }
+  log("  模型状态经过：", [...seen].join(" → "));
   const lm = await c.eval(`return DSHASR.loadMs()`);
   check("识别模型加载好了", st === "ready", `${st}，加载 ${lm}ms（等了 ${Date.now() - t0}ms）`);
 
@@ -200,6 +201,9 @@ async function first(c0){
 
 async function again(c){
   log("  重开后的更新状态：", await c.eval(`return DSHAPP.updateNote() + " / 页面版本 " + DSHAPP.webVersion()`));
+  let st = ""; const t0 = Date.now();
+  for(let i = 0; i < 120; i++){ st = await c.eval(`return DSHASR.state()`); if(st === "ready" || st.startsWith("error")) break; await sleep(500); }
+  check("重开后模型直接加载（不再解压）", st === "ready", `${st}，等了 ${Date.now() - t0}ms，加载 ${await c.eval("return DSHASR.loadMs()")}ms`);
   const want = fs.existsSync(`${outDir}/kept.txt`) ? fs.readFileSync(`${outDir}/kept.txt`, "utf8") : "(第一轮没跑到这一步)";
   const got = await c.eval(`return localStorage.getItem("dshE2E")`);
   check("重开 App 后学习记录还在", got === want, `${got} / ${want}`);

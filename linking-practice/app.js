@@ -1752,6 +1752,7 @@ Views.me.renderStt = function(){
       : `还没给麦克风权限。点「允许使用麦克风」，系统弹窗里选「允许」。`;
     let lm = 0; try{ lm = window.DSHASR.loadMs(); }catch(_){}
     const asr = ast === "ready" ? `<span class="ok">识别模型已就绪</span>${lm ? `（这次打开用了 ${(lm / 1000).toFixed(1)} 秒启动）` : ""}`
+      : /^unpacking/.test(ast) ? `第一次打开：正在解压识别模型 <b>${esc(ast.split(":")[1] || "0")}%</b>（只需一次，不用联网，十几秒到半分钟）`
       : ast === "loading" ? `识别模型正在启动…（每次打开 App 后台加载几秒，不用联网）`
       : /^error/.test(ast) ? `<span class="no">识别模型没启动起来</span>：${esc(ast.replace(/^error:/, ""))}<br><span class="small muted">把 App 从最近任务里划掉重新打开试试。</span>`
       : `识别模型会在用到时自动启动。`;
@@ -1765,7 +1766,7 @@ Views.me.renderStt = function(){
     </div>
     ${testRow}
     ${ver ? `<p class="small muted" style="margin-top:12px">${ver} <button class="link" id="stt-upd">检查新版</button></p>` : ""}`;
-    if(ast === "loading" && !this._asrPoll) this._asrPoll = setTimeout(() => { this._asrPoll = null; if(location.hash === "#me") this.renderStt(); }, 1000);
+    if((ast === "loading" || /^unpacking/.test(ast)) && !this._asrPoll) this._asrPoll = setTimeout(() => { this._asrPoll = null; if(location.hash === "#me") this.renderStt(); }, 1000);
   } else box.innerHTML = `
     <p class="small">${micLine}</p>
     ${Mic.supported() && Mic.state !== "granted" ? `<div class="row wrap" style="gap:8px;margin-top:8px"><button class="btn line sm" style="--c:var(--green)" id="stt-mic">${ICON.mic}<span>允许使用麦克风</span></button>${window.DSHREC && !window.DSHREC.ready() ? `<button class="btn ghost sm" id="stt-ask">重新申请</button><button class="btn ghost sm" id="stt-settings">打开系统设置</button>` : ""}</div>` : ""}

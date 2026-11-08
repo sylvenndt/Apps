@@ -49,7 +49,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/dsh-cache
-          key: dsh-${{ env.SHERPA }}-${{ env.MODEL }}
+          key: dsh-${{ env.SHERPA }}-${{ env.MODEL }}-xz
 
       - name: 放入识别模型、sherpa-onnx 和页面备份
         run: |
@@ -60,10 +60,15 @@ jobs:
             curl -fL --retry 3 -o /tmp/m.tar.bz2 https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/$MODEL.tar.bz2
             tar xjf /tmp/m.tar.bz2 -C $C && rm /tmp/m.tar.bz2
           fi
+          # 650MB 的 encoder 用 xz 压到约 410MB（安装包才能小于 500MB，聊天里能直接发），App 第一次打开时在手机上解压一次
+          if [ ! -s $C/encoder.int8.onnx.xz ]; then
+            xz -9 -T0 --block-size=64MiB -k -c $C/$MODEL/encoder.int8.onnx > $C/encoder.int8.onnx.xz
+          fi
           A=linking-practice/android/app
           mkdir -p $A/libs $A/src/main/assets/asr $A/src/main/assets/web
           cp $C/sherpa-onnx.aar $A/libs/
-          cp $C/$MODEL/encoder.int8.onnx $C/$MODEL/decoder.int8.onnx $C/$MODEL/joiner.int8.onnx $C/$MODEL/tokens.txt $A/src/main/assets/asr/
+          cp $C/encoder.int8.onnx.xz $C/$MODEL/decoder.int8.onnx $C/$MODEL/joiner.int8.onnx $C/$MODEL/tokens.txt $A/src/main/assets/asr/
+          stat -c%s $C/$MODEL/encoder.int8.onnx > $A/src/main/assets/asr/encoder.int8.onnx.size
           # 页面备份：不带 8500 条录音（在线取）、Whisper 运行库（App 用不到）和安卓工程本身
           rsync -a --exclude audio --exclude android --exclude stt linking-practice/ $A/src/main/assets/web/linking-practice/
           du -sh $A/src/main/assets/* $A/libs/*
@@ -131,6 +136,9 @@ jobs:
         run: |
           ./gradlew --no-daemon --stacktrace :app:assembleRelease -Pabis=arm64-v8a
           ls -la app/build/outputs/apk/release/
+          S=$(stat -c%s app/build/outputs/apk/release/app-release.apk)
+          echo "安装包 $((S / 1048576)) MiB"
+          [ $S -lt 524288000 ] || echo "::warning::安装包超过 500 MiB，聊天里发不了"
 
       - name: 发布
         env:

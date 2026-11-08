@@ -47,7 +47,7 @@ android {
 
     androidResources {
         // 模型文件不压缩：读取时直接从安装包里读出，不用先解压
-        noCompress += listOf("onnx", "bin", "wasm")
+        noCompress += listOf("onnx", "bin", "wasm", "xz")
     }
 
     compileOptions {
@@ -69,4 +69,6 @@ dependencies {
     // sherpa-onnx 官方安卓库（CI 从 GitHub Releases 下载到 app/libs/），它的接口是 Kotlin 写的，需要 Kotlin 标准库
     implementation(files("libs/sherpa-onnx.aar"))
     implementation("org.jetbrains.kotlin:kotlin-stdlib:2.1.20")
+    // 解压安装包里 xz 压缩的识别模型（第一次打开时解压一次）
+    implementation("org.tukaani:xz:1.10")
 }

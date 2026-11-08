@@ -532,7 +532,8 @@ function nativeListen(opts){
     const r = await rec.done;
     if(r.error) return { text: "", error: r.error };
     if(!r.speech || r.seconds < 0.3) return { text: "", error: "no-speech", audio: r.wav };
-    const wait = st => status(st === "loading" ? "识别模型正在启动（打开 App 后第一次要几秒）…" : "识别中…");
+    const wait = st => status(/^unpacking/.test(st) ? `第一次打开：正在解压识别模型 ${st.split(":")[1] || 0}%（只需一次，不用联网，十几秒到半分钟）…`
+      : st === "loading" ? "识别模型正在启动（打开 App 后要几秒）…" : "识别中…");
     wait(NativeAsr.state());
     try{
       /* 识别用去掉头尾静音、调好音量的那段，跟回放的是同一段 */
