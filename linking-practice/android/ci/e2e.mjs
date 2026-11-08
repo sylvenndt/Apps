@@ -18,7 +18,7 @@ async function target(){
     try{
       const pid = adb(`shell pidof ${PKG}`);
       if(pid){
-        try{ adb("forward --remove tcp:9222"); }catch(_){}
+        try{ execSync("adb forward --remove tcp:9222", { stdio: "ignore" }); }catch(_){}
         adb(`forward tcp:9222 localabstract:webview_devtools_remote_${pid.split(" ")[0]}`);
         const list = await (await fetch("http://127.0.0.1:9222/json/list")).json();
         const p = list.find(t => t.type === "page" && /appassets\.androidplatform\.net/.test(t.url));
@@ -69,6 +69,7 @@ async function connect(){
   return c;
 }
 
+// （词错率直接用 App 自己的 normalize + lcsLen 在页面里算，数字写法不同不算错）
 const words = t => String(t).toLowerCase().replace(/[^a-z0-9' ]/g, " ").split(/\s+/).filter(Boolean);
 function wer(ref, hyp){
   const a = words(ref), b = words(hyp);
@@ -90,6 +91,9 @@ async function first(c){
   check("麦克风权限已允许", info.perm === "granted", info.perm);
   check("识别引擎是 App 内置的", info.engine === "native", info.engine);
   shot("01-today");
+  // 记一个值，重启 App 后看还在不在（旧版每次打开换端口，记录全丢）
+  const kept = await c.eval(`const v = "kept-" + Date.now(); localStorage.setItem("dshE2E", v); return v;`);
+  fs.writeFileSync(`${outDir}/kept.txt`, kept);
 
   // 识别模型加载
   const t0 = Date.now(); let st = "";
@@ -102,16 +106,21 @@ async function first(c){
   let tw = 0, n = 0;
   for(const cl of clips){
     const b64 = fs.readFileSync(cl.file).toString("base64");
-    const r = await c.eval(`
-      const bin = atob(${JSON.stringify(b64)}); const u = new Uint8Array(bin.length); for(let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
-      const ac = new (window.AudioContext || window.webkitAudioContext)();
-      const buf = await ac.decodeAudioData(u.buffer); ac.close();
-      const pcm = await resample(buf.getChannelData(0), buf.sampleRate, 16000);
-      const t0 = performance.now(); const j = await NativeAsr.pcm(pcm); return { text: j.text, ms: j.ms, wall: Math.round(performance.now() - t0), sec: pcm.length / 16000 };`, 120000);
-    const w = wer(cl.text, r.text); tw += w; n++;
-    log(`  识别 ${r.sec.toFixed(1)}s 声音用 ${r.ms}ms（含传输 ${r.wall}ms）WER ${(w * 100).toFixed(0)}%  原文：${cl.text}  听到：${r.text}`);
+    try{
+      const r = await c.eval(`
+        const bin = atob(${JSON.stringify(b64)}); const u = new Uint8Array(bin.length); for(let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+        // 用离线的 16kHz 音频环境解码，顺便转成 16kHz（不占用声卡）
+        const oc = new OfflineAudioContext(1, 16000, 16000);
+        const buf = await oc.decodeAudioData(u.buffer);
+        const pcm = new Float32Array(buf.getChannelData(0));
+        const t0 = performance.now(); const j = await NativeAsr.pcm(pcm);
+        const a = normalize(${JSON.stringify(cl.text)}), b = normalize(j.text);
+        return { text: j.text, ms: j.ms, wall: Math.round(performance.now() - t0), sec: pcm.length / 16000, match: lcsLen(a, b), n: a.length, m: b.length };`, 60000);
+      const w = 1 - r.match / Math.max(r.n, r.m, 1); tw += w; n++;
+      log(`  识别 ${r.sec.toFixed(1)}s 声音用 ${r.ms}ms（含传输 ${r.wall}ms）差异 ${(w * 100).toFixed(0)}%  原文：${cl.text}  听到：${r.text}`);
+    }catch(e){ n++; tw += 1; log("  识别出错：", cl.text, String(e.message || e).slice(0, 200)); }
   }
-  check("识别准确（平均词错率 < 10%）", n > 0 && tw / n < 0.10, `平均 ${(100 * tw / Math.max(1, n)).toFixed(1)}%`);
+  check("识别准确（平均差异 < 10%）", n > 0 && tw / n < 0.10, `平均 ${(100 * tw / Math.max(1, n)).toFixed(1)}%`);
 
   // 原生录音：start 必须马上返回 true/false（旧版没有返回值，页面就误报「麦克风打不开」）
   const rec = await c.eval(`
@@ -159,16 +168,12 @@ async function first(c){
   log("  在线更新：", note);
   check("在线更新能读到 GitHub 上的版本", /已是最新|已下载新版|还没发布完整/.test(note), note);
 
-  // 记一个值，重启 App 后看还在不在（旧版每次打开换端口，记录全丢）
-  await c.eval(`localStorage.setItem("dshE2E", "kept-" + ${Date.now()}); return true;`);
-  const kept = await c.eval(`return localStorage.getItem("dshE2E")`);
-  fs.writeFileSync(`${outDir}/kept.txt`, kept);
   check("页面没有未捕获的报错", c.errors.length === 0, c.errors.slice(0, 5).join(" || "));
   if(c.console.length) log("  控制台：", c.console.slice(0, 15).join(" || "));
 }
 
 async function again(c){
-  const want = fs.readFileSync(`${outDir}/kept.txt`, "utf8");
+  const want = fs.existsSync(`${outDir}/kept.txt`) ? fs.readFileSync(`${outDir}/kept.txt`, "utf8") : "(第一轮没跑到这一步)";
   const got = await c.eval(`return localStorage.getItem("dshE2E")`);
   check("重开 App 后学习记录还在", got === want, `${got} / ${want}`);
   const href = await c.eval(`return location.href`);
