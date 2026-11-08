@@ -1,0 +1,32 @@
+name: 探测模型镜像（临时）
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/probe-mirrors.yml']
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 探测
+        run: |
+          F=encoder.int8.onnx
+          for u in \
+            https://modelscope.cn/models/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/resolve/master/$F \
+            https://www.modelscope.cn/models/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/resolve/master/$F \
+            https://modelscope.cn/models/k2-fsa/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/resolve/master/$F \
+            https://modelscope.cn/models/pkufool/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/resolve/master/$F \
+            https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/resolve/main/$F \
+            https://hf-mirror.com/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/resolve/main/$F \
+            https://huggingface.co/k2-fsa/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/resolve/main/$F ; do
+            R=$(curl -sIL -m 30 -o /dev/null -w "%{http_code} %{size_download} %{url_effective}" -r 0-1023 "$u" || echo fail)
+            L=$(curl -sIL -m 30 "$u" | grep -i "^content-length" | tail -1 | tr -d '\r')
+            echo "PROBE $u => $R | $L"
+          done
+          # 对一下内容：取前 1MB 的 sha256，和 GitHub 发布包里的比
+          curl -fsSL -r 0-1048575 -o hf.part https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/resolve/main/$F && echo "HF1MB $(sha256sum hf.part)"
+          curl -fsSL -r 0-1048575 -o ms.part https://modelscope.cn/models/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/resolve/master/$F && echo "MS1MB $(sha256sum ms.part)" || echo "MS range failed"
+          curl -fsSL -o m.tar.bz2 https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8.tar.bz2 && tar xjf m.tar.bz2
+          head -c 1048576 sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/$F > gh.part && echo "GH1MB $(sha256sum gh.part)"
+          echo "GHFULL $(sha256sum sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/$F) $(stat -c%s sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/$F)"
+          for f in decoder.int8.onnx joiner.int8.onnx tokens.txt; do echo "GH $f $(sha256sum sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/$f | cut -c1-16)"; done
