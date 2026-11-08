@@ -1146,7 +1146,20 @@ Views.link = {
       const f = e.target.files && e.target.files[0]; if(!f) return;
       if(!Link.tokens.length){ this.status("先输入你录音里读的那句英文。", true); return; }
       this.status("分析上传的录音…"); this.setAudio(f); $("#lk-live").textContent = "";
-      await this.analyze(f, { unsupported: true }); e.target.value = "";
+      let rec = { unsupported: true };
+      /* 安装版：上传的录音也能用内置模型识别（最长 60 秒） */
+      if(NATIVE_ASR){
+        try{
+          const buf = await decode(f), ch = buf.getChannelData(0);
+          const pcm = await resample(ch.subarray(0, Math.min(ch.length, buf.sampleRate * 60)), buf.sampleRate, 16000);
+          this.status("识别上传的录音…");
+          const j = await NativeAsr.pcm(pcm);
+          const text = cleanStt(j.text);
+          rec = text ? { text, local: true, native: true } : { text: "", error: "no-speech" };
+        }catch(err){ rec = { unsupported: true }; }
+      }
+      await this.analyze(f, rec); e.target.value = "";
+      this.status(rec.text ? "分析完成。" : "");
     };
     $("#lk-list").onclick = e => { const b = e.target.closest("[data-say]"); if(b){ const l = Link.links[+b.dataset.say]; Speech.say(`${l.a} ${l.b}`, Math.min(Settings.get("speed"), 0.8)); } };
     $("#lk-check").onclick = $("#lk-list").onclick;
@@ -1178,7 +1191,7 @@ Views.link = {
   },
   async startRec(){
     if(!Link.tokens.length){ this.status("先输入一句英文。", true); return; }
-    if(Listener.engine() === "local") return this.startRecLocal();
+    if(Listener.engine() === "local" || Listener.engine() === "native") return this.startRecLocal(); // 自己录音的引擎：录音和识别用同一段声音，不抢麦克风
     const keep = $("#lk-keep").checked;
     Link.stream = null; Link.recorder = null; Link.chunks = [];
     if(keep){
