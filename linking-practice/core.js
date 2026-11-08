@@ -1,5 +1,5 @@
 "use strict";
-const APP_VERSION = 38; // 跟 index.html 的 ?v= 和 sw.js 的版本一起改
+const APP_VERSION = 39; // 跟 index.html 的 ?v= 和 sw.js 的版本一起改
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -373,6 +373,15 @@ function srErrorText(e){
     "start-failed": "语音识别没能启动，稍等一下再点一次。",
     timeout: "识别超时了，再试一次。"
   })[e] || "没听清，再试一次。";
+}
+
+/* 复制到剪贴板：安装版用 App 自己的剪贴板（WebView 里 navigator.clipboard 经常被拒） */
+async function copyText(text){
+  if(window.DSHAPP && typeof window.DSHAPP.copy === "function"){ if(window.DSHAPP.copy(String(text))) return; }
+  if(navigator.clipboard && navigator.clipboard.writeText){ await navigator.clipboard.writeText(text); return; }
+  const ta = document.createElement("textarea"); ta.value = text; ta.style.cssText = "position:fixed;opacity:0;top:0";
+  document.body.appendChild(ta); ta.select(); const ok = document.execCommand("copy"); ta.remove();
+  if(!ok) throw new Error("copy failed");
 }
 
 /* ---------- 小提示条 ---------- */

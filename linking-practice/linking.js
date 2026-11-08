@@ -192,8 +192,41 @@ const HOMO = [["to","too","two"],["for","four"],["right","write"],["there","thei
 const HOMO_MAP = new Map(); HOMO.forEach((g, i) => g.forEach(w => HOMO_MAP.set(w, i)));
 const same = (a, b) => a === b || (HOMO_MAP.has(a) && HOMO_MAP.get(a) === HOMO_MAP.get(b));
 
+/* 数字读成英文单词（识别模型常把 six 写成 6、把 six a.m. 写成 6am），比对前统一成单词 */
+const ONES = ["zero","one","two","three","four","five","six","seven","eight","nine","ten","eleven","twelve","thirteen","fourteen","fifteen","sixteen","seventeen","eighteen","nineteen"];
+const TENS = ["","","twenty","thirty","forty","fifty","sixty","seventy","eighty","ninety"];
+function numWords(n){
+  if(n < 20) return ONES[n];
+  if(n < 100) return TENS[Math.floor(n / 10)] + (n % 10 ? " " + ONES[n % 10] : "");
+  if(n < 1000) return ONES[Math.floor(n / 100)] + " hundred" + (n % 100 ? " " + numWords(n % 100) : "");
+  if(n < 1000000) return numWords(Math.floor(n / 1000)) + " thousand" + (n % 1000 ? " " + numWords(n % 1000) : "");
+  return String(n);
+}
+const ORD = { one: "first", two: "second", three: "third", five: "fifth", eight: "eighth", nine: "ninth", twelve: "twelfth" };
+function ordWords(n){
+  const w = numWords(n).split(" "), last = w.pop();
+  return w.concat(ORD[last] || (/y$/.test(last) ? last.replace(/y$/, "ieth") : last + "th")).join(" ");
+}
+const COMPOUND = { anytime: "any time", alright: "all right", ok: "okay", cannot: "can not", everytime: "every time", "o'clock": "oclock" };
+function spellNumbers(s){
+  return s
+    .replace(/\$(\d+)/g, "$1 dollars ")
+    .replace(/(\d)\s*%/g, "$1 percent ")
+    .replace(/\b(\d{1,2}):00\b/g, "$1 ")
+    .replace(/\b(\d{1,2}):0(\d)\b/g, "$1 oh $2 ")
+    .replace(/\b(\d{1,2}):(\d\d)\b/g, "$1 $2 ")
+    .replace(/\b(\d+)(?:st|nd|rd|th)\b/g, (_, d) => " " + (+d < 1000000 ? ordWords(+d) : d) + " ")
+    .replace(/\b(\d+)\s*(a|p)\.?m\b\.?/g, "$1 $2 m ")
+    .replace(/(\d),(?=\d{3}\b)/g, "$1")
+    .replace(/\b(\d+)\.(\d+)\b/g, (_, a, b) => " " + a + " point " + b.split("").join(" ") + " ")
+    .replace(/\d+/g, d => " " + (d.length > 1 && d[0] === "0" ? d.split("").map(x => ONES[+x]).join(" ") : +d < 1000000 ? numWords(+d) : d) + " ");
+}
+
 function normalize(text){
-  let s = " " + text.toLowerCase().replace(/[’‘]/g,"'") + " ";
+  let s = " " + String(text || "").toLowerCase().replace(/[’‘]/g,"'") + " ";
+  s = s.replace(/\b(a|p)\.m\./g, "$1 m ").replace(/\b(a|p)\.m\b/g, "$1 m ");
+  s = spellNumbers(s);
+  s = s.replace(/[a-z']+/g, w => COMPOUND[w] || w);
   for(const [re, rep] of CONTR) s = s.replace(re, rep);
   return s.split(/[^a-z0-9']+/).map(x => x.replace(/'/g,"")).filter(Boolean).map(x => DIGITS[x] || x);
 }

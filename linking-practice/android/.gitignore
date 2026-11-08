@@ -1,0 +1,8 @@
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+# CI 打包时放进来的模型和网页备份，不进仓库
+app/src/main/assets/
+app/libs/

@@ -8,6 +8,8 @@
 /* 装成 App 打开：主屏幕图标（standalone）或者我们的 APK 壳（?app=1） */
 const IS_APP = /[?&]app=1/.test(location.search);
 const IS_STANDALONE = IS_APP || (() => { try{ return matchMedia("(display-mode: standalone)").matches || navigator.standalone === true; }catch(_){ return false; } })();
+/* 安装版（外壳 3 起）自带原生识别：Parakeet 模型装在安装包里，手机本地识别，不用下载 */
+const NATIVE_ASR = (() => { try{ return !!(window.DSHASR && window.DSHASR.available()); }catch(_){ return false; } })();
 const STT_MODELS = {
   small: { id: "onnx-community/distil-small.en", mb: 172, name: "标准", desc: "约 172MB，识别又快又准，普通句子很少认错（推荐）" },
   base: { id: "onnx-community/whisper-base.en", mb: 73, name: "省流量", desc: "约 73MB，下载和识别都最快，口音重时容易认错" },
@@ -34,8 +36,14 @@ function micErr(e){
 const Mic = {
   state: "unknown", // granted | denied | prompt | unknown
   supported(){ return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia); },
+  /* App 里的录音权限：granted / prompt（还没问过）/ denied / blocked（拒绝且不再询问，只能去系统设置） */
+  nativePerm(){
+    const R = window.DSHREC; if(!R) return null;
+    try{ if(R.ready()) return "granted"; return typeof R.permState === "function" ? R.permState() : "prompt"; }catch(_){ return "prompt"; }
+  },
   async query(){
-    if(window.DSHREC && window.DSHREC.ready()){ this.state = "granted"; return this.state; }
+    const np = this.nativePerm();
+    if(np){ this.state = np === "granted" ? "granted" : np === "prompt" ? "prompt" : "denied"; this.blocked = np === "blocked"; return this.state; }
     try{
       const p = await navigator.permissions.query({ name: "microphone" });
       this.state = p.state; p.onchange = () => { this.state = p.state; document.dispatchEvent(new Event("fluent-mic")); };
@@ -44,10 +52,27 @@ const Mic = {
   },
   /* 主动申请麦克风权限：系统会弹出「允许使用麦克风」 */
   async ensure(){
-    if(window.DSHREC && window.DSHREC.ready()){
+    const np = this.nativePerm();
+    if(np === "granted"){
       this.state = "granted"; this._okThisSession = true; store.set("micOk", true);
       document.dispatchEvent(new Event("fluent-mic"));
       return { ok: true };
+    }
+    /* App 里：直接弹安卓自己的权限窗口，等用户点完 */
+    if(np && typeof window.DSHREC.permState === "function"){
+      if(np === "blocked"){ this.state = "denied"; this.blocked = true; document.dispatchEvent(new Event("fluent-mic")); return { ok: false, error: "mic-blocked" }; }
+      const ok = await new Promise(res => {
+        let done = false;
+        const fin = v => { if(done) return; done = true; document.removeEventListener("dsh-mic", on); clearInterval(t); res(v); };
+        const on = () => fin(!!window.DSHREC.ready());
+        document.addEventListener("dsh-mic", on);
+        const t0 = Date.now(), t = setInterval(() => { if(window.DSHREC.ready()) fin(true); else if(Date.now() - t0 > 60000) fin(false); }, 400);
+        try{ window.DSHREC.ask(); }catch(_){ fin(false); }
+      });
+      await this.query();
+      document.dispatchEvent(new Event("fluent-mic"));
+      if(ok){ this.state = "granted"; this._okThisSession = true; store.set("micOk", true); return { ok: true }; }
+      return { ok: false, error: this.blocked ? "mic-blocked" : "mic-denied" };
     }
     if(!this.supported()) return { ok: false, error: IN_APP_BROWSER ? "mic-inapp" : "mic-unsupported" };
     if(this.state === "granted" && this._okThisSession) return { ok: true };
@@ -78,32 +103,40 @@ const Mic = {
       const R = window.DSHREC;
       const done = (async () => {
         try{ R.reset(); }catch(_){}
-        let started = false;
-        try{ started = R.start(maxMs, silenceMs); }catch(_){ started = false; }
-        if(!started) return { error: "mic-busy" };
+        let started;
+        try{ started = typeof R.start3 === "function" ? R.start3(maxMs, silenceMs, waitMs) : R.start(maxMs, silenceMs); }catch(_){ started = false; }
+        /* 老外壳的 start 没有返回值（undefined）：看状态有没有变成 rec */
+        if(started === undefined){
+          for(let i = 0; i < 15 && !started; i++){ await new Promise(r => setTimeout(r, 100)); try{ started = R.state() === "rec" || R.state() === "done"; }catch(_){} }
+        }
+        if(!started){
+          let why = ""; try{ why = typeof R.error === "function" ? R.error() : String(R.state()).replace(/^error:/, ""); }catch(_){}
+          return { error: why === "perm" ? "mic-denied" : why === "init" ? "mic-init" : "mic-busy" };
+        }
         const t0 = performance.now();
         while(performance.now() - t0 < maxMs + 6000){
-          await new Promise(r => setTimeout(r, 110));
+          await new Promise(r => setTimeout(r, 100));
           let st = "idle";
           try{ st = R.state(); }catch(_){ st = "error:state"; }
-          if(st === "rec"){ try{ onLevel && onLevel(Math.min(1, R.level() / 2500), true); }catch(_){} continue; }
+          if(st === "rec"){ try{ onLevel && onLevel(Math.min(1, R.level() / 2500), typeof R.speech === "function" ? R.speech() : R.level() > 900); }catch(_){} continue; }
           if(st === "done"){
-            let b64 = "";
+            let b64 = "", sp = true;
             try{ b64 = R.result() || ""; }catch(_){ b64 = ""; }
-            try{ R.reset(); }catch(_){}
+            try{ if(typeof R.speech === "function") sp = !!R.speech(); }catch(_){}
             if(!b64) return { error: "mic-stalled" };
             const bin = atob(b64), n = bin.length >> 1;
+            if(n < 1600) return { error: "mic-stalled" };
             const f = new Float32Array(n);
             for(let i = 0; i < n; i++){
               let v = bin.charCodeAt(i * 2) | (bin.charCodeAt(i * 2 + 1) << 8);
               if(v > 32767) v -= 65536;
               f[i] = v / 32768;
             }
-            if(n < 1600) return { error: "mic-stalled" };
-            const out = await pack([f], 16000, true);
-            return { ...out, speech: true, peak: 1, reason: "native" };
+            const out = await pack([f], 16000, sp);
+            return { ...out, speech: sp, peak: 1, reason: "native" };
           }
-          return { error: st.indexOf("error:") === 0 ? "mic-busy" : "mic-stalled" };
+          if(st === "idle") return { error: "aborted" };
+          return { error: st === "error:perm" ? "mic-denied" : st === "error:read" ? "mic-stalled" : "mic-busy" };
         }
         try{ R.stop(); }catch(_){}
         return { error: "mic-stalled" };
@@ -378,6 +411,7 @@ const cleanStt = t => String(t || "").replace(/\[[^\]]*\]|\([^)]*\)|\*[^*]*\*/g,
 const Listener = {
   fails: 0,
   engine(){
+    if(NATIVE_ASR) return "native"; // 安装版：录音和识别都在 App 里完成，最准也最稳
     const s = Settings.get("srEngine");
     if(s === "local") return Mic.supported() ? "local" : (SR ? "system" : "none");
     if(s === "system") return SR ? "system" : (Mic.supported() ? "local" : "none");
@@ -458,21 +492,81 @@ function localListen(opts){
   return { stop(){ rec.stop(); }, done };
 }
 
+/* ---------- 安装版：原生录音 + 内置 Parakeet 识别 ---------- */
+const NativeAsr = {
+  state(){ try{ return window.DSHASR.state(); }catch(_){ return "error:bridge"; } },
+  name(){ try{ return window.DSHASR.name(); }catch(_){ return "Parakeet"; } },
+  /* 交给 App 识别，等结果；返回 { text, ms } 或抛错 */
+  async run(id, onWait){
+    const t0 = Date.now();
+    for(;;){
+      await new Promise(r => setTimeout(r, 70));
+      let v = "";
+      try{ v = window.DSHASR.job(id); }catch(e){ throw new Error("识别接口出错"); }
+      if(v){ const j = JSON.parse(v); if(j.error) throw new Error(j.error); return j; }
+      if(onWait) onWait(this.state());
+      if(Date.now() - t0 > 90000) throw new Error("识别超时");
+    }
+  },
+  /* 用页面这边录的声音（Float32，16kHz）识别：麦克风走 getUserMedia 时用 */
+  async pcm(pcm, onWait){
+    const n = pcm.length, b = new Uint8Array(n * 2);
+    for(let i = 0; i < n; i++){ let v = Math.max(-1, Math.min(1, pcm[i])) * 32767 | 0; b[i * 2] = v & 255; b[i * 2 + 1] = (v >> 8) & 255; }
+    let bin = ""; for(let i = 0; i < b.length; i += 0x8000) bin += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
+    return this.run(window.DSHASR.recognizePcm(btoa(bin)), onWait);
+  }
+};
+function nativeListen(opts){
+  const status = m => { const f = opts.onStatus || opts.onText; f && f(m); };
+  let rec = null, cancelled = false;
+  const done = (async () => {
+    if(!(window.DSHREC && window.DSHREC.ready())){
+      const m = await Mic.ensure();
+      if(!m.ok) return { text: "", error: m.error };
+    }
+    if(cancelled) return { text: "", error: "aborted" };
+    try{ if(NativeAsr.state() === "off") window.DSHASR.load(); }catch(_){}
+    let speaking = false;
+    status("正在听…说完停一下会自动结束");
+    rec = Mic.record({ maxMs: opts.maxMs || 20000, silenceMs: opts.silenceMs || 1800, onLevel: (lv, sp) => { if(sp && !speaking){ speaking = true; status("听到了，继续说…"); } } });
+    const r = await rec.done;
+    if(r.error) return { text: "", error: r.error };
+    if(!r.speech || r.seconds < 0.3) return { text: "", error: "no-speech", audio: r.wav };
+    const wait = st => status(st === "loading" ? "识别模型正在启动（打开 App 后第一次要几秒）…" : "识别中…");
+    wait(NativeAsr.state());
+    try{
+      /* 识别用去掉头尾静音、调好音量的那段，跟回放的是同一段 */
+      const j = await NativeAsr.pcm(r.pcm, wait);
+      const text = cleanStt(j.text);
+      return { text, confidence: 0, error: text ? null : "no-speech", audio: r.wav, seconds: r.seconds, local: true, native: true, ms: j.ms };
+    }catch(e){ return { text: "", error: "native-failed", detail: e.message, audio: r.wav }; }
+  })();
+  return { stop(){ cancelled = true; rec && rec.stop(); }, done };
+}
+
 /* 所有页面的「说」都走这里 */
 function startListening(opts = {}){
   const eng = Listener.engine();
   if(eng === "none") return { stop(){}, done: Promise.resolve({ text: "", error: IN_APP_BROWSER ? "mic-inapp" : "unsupported" }) };
+  if(eng === "native") return nativeListen(opts);
   return eng === "local" ? localListen(opts) : systemListen(opts);
 }
+/* 安装版一打开就在后台准备识别模型（App 自己也会加载，这里只是保险） */
+if(NATIVE_ASR) setTimeout(() => { try{ if(NativeAsr.state() === "off") window.DSHASR.load(); }catch(_){} }, 3000);
 
-const MIC_FIX = IS_IOS
+const MIC_FIX = window.DSHREC
+  ? "去「设置 → 应用 → 每日美语 → 权限 → 麦克风」选「允许」，再回到 App 点一次。「我的 → 跟读识别」里有「打开系统设置」按钮。"
+  : IS_IOS
   ? "iPhone：打开「设置」→「Safari 浏览器」→「麦克风」，选「允许」或「询问」，再回到 App 点一次。用的是主屏幕上的 App 的话，下次弹出「允许使用麦克风」时点「允许」。"
   : "安卓：在 Chrome 里点地址栏左边的图标 →「权限」→「麦克风」→ 允许；用的是主屏幕上的 App 的话，长按图标 →「应用信息」→「权限」→「麦克风」→ 允许。";
 const SR_ERR_MORE = {
   "mic-denied": "麦克风权限被拒绝了。" + MIC_FIX,
   "mic-insecure": "要用 https 网址打开才能用麦克风。",
   "mic-none": "没找到麦克风。",
-  "mic-busy": "麦克风打不开：多数是系统还没给这个 App 录音权限，或者别的 App 正在录音/通话。先去「设置 → 应用 → 每日美语 → 权限」把麦克风打开，再回来点一次。",
+  "mic-busy": "麦克风被别的 App 占着（正在通话、录音、开着语音助手或录屏）。把它们关掉，再点一次。",
+  "mic-init": "麦克风没能启动。把 App 从最近任务里划掉重新打开；还不行就重启一下手机。",
+  "mic-blocked": "麦克风权限被关掉了，而且系统不再弹窗询问。去「设置 → 应用 → 每日美语 → 权限 → 麦克风」选「允许」，回到 App 再点一次（「我的 → 跟读识别」里有直达按钮）。",
+  "native-failed": "识别出错了，再说一次试试。如果一直这样，把 App 关掉重新打开。",
   "mic-failed": "麦克风没能打开，再点一次试试。",
   "mic-stalled": "麦克风打开了，但没收到声音。再点一次试试；还不行就把 App 关掉重新打开。",
   "mic-unsupported": "这个浏览器不能录音，请用 Safari 或 Chrome 打开。",

@@ -1,6 +1,6 @@
 const fs=require('fs'),vm=require('vm');
 const D='/home/claude/apps/linking-practice/';
-const ctx={console,window:{},document:{}};vm.createContext(ctx);
+const ctx={console,location:{search:'',href:'http://localhost/'},window:{},document:{}};vm.createContext(ctx);
 const DEF={cast:'scene',accent:'both',voice1:'af_heart',voice2:'am_michael'};
 vm.runInContext(['data.js','linking.js'].map(f=>fs.readFileSync(D+f,'utf8')).join('\n;\n')+`\n;const Settings={get:k=>(${JSON.stringify(DEF)})[k]};\n`+fs.readFileSync(D+'neural.js','utf8')+`\n;this.__o={LINK_PRESETS,ALL_ITEMS,tokenize,detectLinks,Voices,cyrb53,normText};`,ctx);
 const o=ctx.__o, all=JSON.parse(fs.readFileSync('list_all.json'));

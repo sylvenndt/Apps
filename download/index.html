@@ -19,16 +19,22 @@ img.ic{width:64px;height:64px;border-radius:16px;display:block;margin-bottom:14p
 <body>
 <div class="card">
   <img class="ic" src="icon-192.png" alt="每日美语">
-  <h1>每日美语 · 安卓安装包 <span class="v">v2.1</span></h1>
-  <p>装好后桌面有独立图标，打开没有地址栏。这一版新增：深墨底奶白线的新图标、按钮与芯片全局统一（圆角、内边距、字号、点击反馈）、麦克风改用系统原生录音。</p>
-  <a class="btn" href="DailyEnglish-2.1.apk" download>下载 APK（13MB）</a>
+  <h1>每日美语 · 安卓安装包 <span class="v" id="ver">v3</span></h1>
+  <p>这一版自带最准的英语识别模型（NVIDIA Parakeet），跟读和口语直接在手机上识别，<b>不用再下载模型</b>，也不用联网。修好了「麦克风打不开」的误报；学习记录和设置不会再每次打开就丢。</p>
+  <a class="btn" id="dl" href="https://github.com/sylvenndt/Apps/releases/download/dailyenglish-latest/DailyEnglish.apk" download>下载 APK（约 <span id="size">700</span>MB）</a>
   <ol>
-    <li>点上面的按钮下载 APK；</li>
-    <li>在浏览器「下载内容」里点它安装，系统提示「禁止安装未知来源应用」时允许本次安装；</li>
-    <li>打开 App，第一次会请求麦克风权限，点「允许」——不给的话跟读识别用不了；</li>
-    <li>已经装过旧版的可以直接覆盖安装，学习记录不会丢。</li>
+    <li><b>装过 2.x 旧版的，先把旧版卸载</b>（旧版的签名丢了，不能直接覆盖；旧版每次打开记录本来就会丢，卸载没有损失）；</li>
+    <li>点上面的按钮下载，在「下载内容」里点它安装，提示「未知来源」时允许本次安装；</li>
+    <li>打开 App，弹出麦克风权限时点「允许」。</li>
   </ol>
-  <p style="margin-top:16px;color:#8A9199;font-size:13px">装好之后我每次更新你打开就是新版，不用重新下载。</p>
+  <p style="margin-top:16px;color:#8A9199;font-size:13px">以后页面有更新，App 联网时会自动下载，顶部出现提示条点一下就换上，不用重装。只有安装包本身要改时才需要重新下载。</p>
 </div>
+<script>
+fetch("apk.json?t=" + Date.now()).then(function(r){ return r.json(); }).then(function(j){
+  if(j.version) document.getElementById("ver").textContent = "v" + j.version;
+  if(j.size) document.getElementById("size").textContent = Math.round(j.size / 1048576);
+  if(j.url) document.getElementById("dl").href = j.url;
+}).catch(function(){});
+</script>
 </body>
 </html>

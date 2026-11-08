@@ -9,3 +9,4 @@
 - 改完先在电脑上预览（在仓库根目录运行 `python -m http.server 8000`，打开 http://localhost:8000/linking-practice/），没问题再提交并推送到 main 分支，约 1 分钟后手机上会出现「新版本」提示。
 - 一次只改一个功能；不要删除 linking-practice/audio 里的录音文件。
 - 本地这份代码可能没有 linking-practice/audio 文件夹（为了下载快，用 git sparse-checkout 把 8500 条录音留在了 GitHub 上）。这是正常的：手机上的 App 照样从 GitHub 读录音。不要新建、删除或重新生成这个文件夹，也不要关掉 sparse-checkout；电脑上预览时句子会用备用语音朗读。
+- 安卓安装包（linking-practice/android）是一个外壳：页面打包在里面，联网时自己从 GitHub Pages 下载新版页面（按 sw.js 里的版本号和 CORE 文件清单）。所以只改页面不用重新打包，但新加的 JS/CSS 文件一定要写进 sw.js 的 CORE 清单。语音识别是安装包里自带的 Parakeet 模型（stt.js 里的 NativeAsr），App 里不用 Whisper。

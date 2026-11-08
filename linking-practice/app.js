@@ -900,7 +900,7 @@ Views.speak = {
     if(!said){ input.focus(); toast("先说一句或打一句"); return; }
     if(!AI.ready()){
       const text = coachPrompt(said);
-      try{ await navigator.clipboard.writeText(text); toast("已复制，打开 DeepSeek 或 Claude 粘贴就行"); }
+      try{ await copyText(text); toast("已复制，打开 DeepSeek 或 Claude 粘贴就行"); }
       catch(_){ err.hidden = false; err.style.color = "var(--muted)"; err.innerHTML = `复制失败，请手动复制：<textarea style="margin-top:6px" rows="6">${esc(text)}</textarea>`; }
       $("#sp-thread").insertAdjacentHTML("beforeend", fixPanel(said));
       Log.add("speak");
@@ -1384,7 +1384,7 @@ Views.me = {
       const data = {}; store.keys().forEach(k => data[k] = store.get(k));
       delete data.settings; data._v = 1;
       const text = JSON.stringify(data);
-      try{ await navigator.clipboard.writeText(text); toast("备份已复制，存到备忘录里"); }
+      try{ await copyText(text); toast("备份已复制，存到备忘录里"); }
       catch(_){ const t = $("#me-backup"); t.hidden = false; t.value = text; t.select(); toast("请手动复制下面的内容"); }
     };
     $("#me-import").onclick = () => {
@@ -1704,7 +1704,7 @@ Views.me.renderPron = function(){
 };
 
 /* ================= 跟读识别 ================= */
-["fluent-stt", "fluent-mic"].forEach(ev => document.addEventListener(ev, () => { if(location.hash === "#me") Views.me.renderStt(); }));
+["fluent-stt", "fluent-mic", "dsh-mic"].forEach(ev => document.addEventListener(ev, () => { if(location.hash === "#me"){ Views.me._micQueried = false; Views.me.renderStt(); } }));
 document.addEventListener("visibilitychange", () => {
   if(document.hidden || location.hash !== "#me") return;
   Views.me._micQueried = false;
@@ -1727,7 +1727,33 @@ Views.me.renderStt = function(){
     : st === "error" ? `<span class="no">模型加载失败</span>：${esc(Whisper.error)}<br><span class="small muted">网络不稳就再点一次；连 Wi-Fi 下载更省流量。</span>`
     : Whisper.downloaded() ? `识别模型已下载（${esc(m.name)}），用的时候自动启动。` : `还没下载（${esc(m.desc)}）。`;
   const nowTxt = now === "local" ? "现在用的是：手机上识别" : now === "system" ? "现在用的是：手机自带识别" : "这个浏览器没法识别";
-  box.innerHTML = `
+  const testRow = `<div class="row wrap" style="gap:8px;margin-top:6px"><button class="btn ghost sm" id="stt-test">${ICON.mic}<span>${this._sttTesting ? "说完了" : "说一句试试"}</span></button></div>
+    <p class="small" id="stt-res" style="margin-top:10px">${this._sttMsg || ""}</p>`;
+  if(NATIVE_ASR){
+    /* 安装版：原生录音 + 内置识别，没有模型可选、也不用下载 */
+    const np = Mic.nativePerm(), ast = NativeAsr.state();
+    const nm = esc(NativeAsr.name());
+    const mic = np === "granted" ? `<span class="ok">麦克风已就绪</span>（App 直接录音）`
+      : np === "blocked" ? `<span class="no">麦克风权限被关掉了</span>，系统不会再弹窗。点「打开系统设置」→「权限」→「麦克风」→「允许」，回到这里会自动变成已就绪。`
+      : np === "denied" ? `<span class="no">没给麦克风权限</span>。点「允许使用麦克风」，系统弹窗里选「允许」。`
+      : `还没给麦克风权限。点「允许使用麦克风」，系统弹窗里选「允许」。`;
+    let lm = 0; try{ lm = window.DSHASR.loadMs(); }catch(_){}
+    const asr = ast === "ready" ? `<span class="ok">识别模型已就绪</span>${lm ? `（这次打开用了 ${(lm / 1000).toFixed(1)} 秒启动）` : ""}`
+      : ast === "loading" ? `识别模型正在启动…（每次打开 App 后台加载几秒，不用联网）`
+      : /^error/.test(ast) ? `<span class="no">识别模型没启动起来</span>：${esc(ast.replace(/^error:/, ""))}<br><span class="small muted">把 App 从最近任务里划掉重新打开试试。</span>`
+      : `识别模型会在用到时自动启动。`;
+    let ver = ""; try{ ver = `安装包 ${esc(window.DSHAPP.versionName())} · 页面版本 ${window.DSHAPP.webVersion()}${window.DSHAPP.updateNote() ? " · " + esc(window.DSHAPP.updateNote()) : ""}`; }catch(_){}
+    box.innerHTML = `
+    <p class="small">${mic}</p>
+    ${np !== "granted" ? `<div class="row wrap" style="gap:8px;margin-top:8px">${np !== "blocked" ? `<button class="btn line sm" style="--c:var(--green)" id="stt-mic">${ICON.mic}<span>允许使用麦克风</span></button>` : ""}<button class="btn ghost sm" id="stt-settings">打开系统设置</button></div>` : ""}
+    <div class="field" style="margin-top:14px"><label>识别模型 <span class="small muted">${nm}</span></label>
+      <p class="help">NVIDIA 出的英文识别模型，公开测评里准确度排在最前面一档，比之前要下载的 Whisper「最准」还准，口音和连读也认得出。它装在安装包里，在手机上识别：不用下载、不用联网、不依赖 Google。</p>
+      <p class="small" style="margin-top:8px">${asr}</p>
+    </div>
+    ${testRow}
+    ${ver ? `<p class="small muted" style="margin-top:12px">${ver} <button class="link" id="stt-upd">检查新版</button></p>` : ""}`;
+    if(ast === "loading" && !this._asrPoll) this._asrPoll = setTimeout(() => { this._asrPoll = null; if(location.hash === "#me") this.renderStt(); }, 1000);
+  } else box.innerHTML = `
     <p class="small">${micLine}</p>
     ${Mic.supported() && Mic.state !== "granted" ? `<div class="row wrap" style="gap:8px;margin-top:8px"><button class="btn line sm" style="--c:var(--green)" id="stt-mic">${ICON.mic}<span>允许使用麦克风</span></button>${window.DSHREC && !window.DSHREC.ready() ? `<button class="btn ghost sm" id="stt-ask">重新申请</button><button class="btn ghost sm" id="stt-settings">打开系统设置</button>` : ""}</div>` : ""}
     <div class="field" style="margin-top:14px"><label>用哪种识别 <span class="small muted">${nowTxt}</span></label>
@@ -1743,8 +1769,7 @@ Views.me.renderStt = function(){
       <p class="small muted" style="margin-top:4px">换一个模型要重新下载一次；「最准」体积最大也最认口音。</p>
       ${st !== "ready" && st !== "loading" ? `<button class="btn line sm" style="--c:var(--blue);margin-top:8px" id="stt-dl">${Whisper.downloaded() ? "现在启动" : st === "error" ? "重新下载" : `下载模型（约 ${m.mb}MB）`}</button>` : ""}
     </div>` : ""}
-    <div class="row wrap" style="gap:8px;margin-top:6px"><button class="btn ghost sm" id="stt-test">${ICON.mic}<span>${this._sttTesting ? "说完了" : "说一句试试"}</span></button></div>
-    <p class="small" id="stt-res" style="margin-top:10px">${this._sttMsg || ""}</p>`;
+    ${testRow}`;
   const keep = fn => () => { const y = window.scrollY; fn(); this.renderStt(); window.scrollTo(0, y); };
   const mb = $("#stt-mic"); if(mb) mb.onclick = async () => { const r = await Mic.ensure(); toast(r.ok ? "麦克风已允许" : srErrorText(r.error)); this.renderStt(); };
   const askB = $("#stt-ask"); if(askB) askB.onclick = () => { try { window.DSHREC.ask(); } catch(e) {} setTimeout(() => { this._micQueried = false; this.renderStt(); }, 800); };
@@ -1752,6 +1777,7 @@ Views.me.renderStt = function(){
   $$("[data-sre]").forEach(b => b.onclick = keep(() => Settings.set("srEngine", b.dataset.sre)));
   $$("[data-stm]").forEach(b => b.onclick = keep(() => { Settings.set("sttModel", b.dataset.stm); if(Whisper.state === "ready" || Whisper.state === "loading") Whisper.reset(); }));
   const dl = $("#stt-dl"); if(dl) dl.onclick = keep(() => Whisper.load());
+  const up = $("#stt-upd"); if(up) up.onclick = () => { try{ window.DSHAPP.checkUpdate(); toast("正在检查新版…"); setTimeout(() => this.renderStt(), 6000); }catch(_){} };
   const rt = $("#stt-retry"); if(rt) rt.onclick = keep(() => { store.set("srBroken", false); Listener.fails = 0; });
   const msg = html => { this._sttMsg = html; const el = $("#stt-res"); if(el) el.innerHTML = html; bindMine(); };
   const bindMine = () => { const pm = $("#stt-mine"); if(pm && this._sttAudio) pm.onclick = () => { Speech.stop(); Neural.play(this._sttAudio, 1); }; };
@@ -1901,7 +1927,20 @@ try{
   if(boot && !window.__bootErr) requestAnimationFrame(() => { boot.classList.add("out"); setTimeout(() => boot.remove(), 320); });
 }catch(_){}
 /* 新版本：每次打开、每次切回 App 都检查一次；新版本装好后在顶部提示，点一下就换上 */
-if("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")){
+/* 安装版：页面由 App 自己提供和更新（不用 Service Worker）；App 下好新版后通知这里 */
+function showUpdateBar(text){
+  if(document.getElementById("upd-bar")) return;
+  const bar = document.createElement("button");
+  bar.id = "upd-bar"; bar.className = "upd-bar";
+  bar.textContent = text;
+  bar.onclick = () => location.reload();
+  document.body.appendChild(bar);
+}
+if(IS_APP && window.DSHAPP){
+  window.addEventListener("dsh-update", () => showUpdateBar("新版本已经下载好，点这里马上换上"));
+  try{ navigator.serviceWorker && navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister())).catch(() => {}); }catch(_){}
+}
+else if("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")){
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(reg => {
     const check = () => reg.update().catch(() => {});
@@ -1909,12 +1948,8 @@ if("serviceWorker" in navigator && (location.protocol === "https:" || location.h
     document.addEventListener("visibilitychange", () => { if(document.visibilityState === "visible") check(); });
   }).catch(() => {});
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if(!hadController || document.getElementById("upd-bar")) return;
-    const bar = document.createElement("button");
-    bar.id = "upd-bar"; bar.className = "upd-bar";
-    bar.textContent = "新版本已经下载好，点这里马上换上";
-    bar.onclick = () => location.reload();
-    document.body.appendChild(bar);
+    if(!hadController) return;
+    showUpdateBar("新版本已经下载好，点这里马上换上");
   });
 }
 Perf.boot = Math.round(performance.now());

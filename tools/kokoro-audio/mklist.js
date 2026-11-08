@@ -1,7 +1,7 @@
 // Build the canonical list of (voice, text) clips to pre-record, using the app's own casting code.
 const fs = require('fs'), vm = require('vm');
 const D = '/home/claude/apps/linking-practice/';
-const ctx = { console, window: {}, document: {}, localStorage: { getItem: () => null, setItem() {} } };
+const ctx = { console, location: { search: '', href: 'http://localhost/' }, window: {}, document: {}, localStorage: { getItem: () => null, setItem() {} } };
 vm.createContext(ctx);
 const DEF = { cast: 'scene', accent: process.env.ACCENT || 'both', voice1: 'af_heart', voice2: 'am_michael' };
 vm.runInContext(['data.js', 'emotion.js', 'words.js', 'vocab.js'].map(f => fs.readFileSync(D + f, 'utf8')).join('\n;\n') +

@@ -1,0 +1,149 @@
+name: 每日美语 Android 打包
+
+# 外壳（安卓工程）变了才重新打包；页面改动不用打包，App 联网时自己会下载新版页面。
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'linking-practice/android/**'
+      - '.github/workflows/dailyenglish-android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dailyenglish-android
+  cancel-in-progress: true
+
+env:
+  SHERPA: '1.13.8'
+  MODEL: sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 腾出磁盘空间（模型 650MB，打包时会复制好几份）
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/share/boost /usr/local/lib/node_modules/@aws-amplify "$AGENT_TOOLSDIRECTORY/CodeQL" || true
+          df -h /
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+          cache-dependency-path: |
+            linking-practice/android/**/*.gradle.kts
+            linking-practice/android/gradle/wrapper/gradle-wrapper.properties
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 缓存识别模型和 sherpa-onnx
+        uses: actions/cache@v4
+        with:
+          path: ~/dsh-cache
+          key: dsh-${{ env.SHERPA }}-${{ env.MODEL }}
+
+      - name: 放入识别模型、sherpa-onnx 和页面备份
+        run: |
+          set -e
+          C=~/dsh-cache; mkdir -p $C
+          [ -s $C/sherpa-onnx.aar ] || curl -fL --retry 3 -o $C/sherpa-onnx.aar https://github.com/k2-fsa/sherpa-onnx/releases/download/v$SHERPA/sherpa-onnx-$SHERPA.aar
+          if [ ! -s $C/$MODEL/encoder.int8.onnx ]; then
+            curl -fL --retry 3 -o /tmp/m.tar.bz2 https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/$MODEL.tar.bz2
+            tar xjf /tmp/m.tar.bz2 -C $C && rm /tmp/m.tar.bz2
+          fi
+          A=linking-practice/android/app
+          mkdir -p $A/libs $A/src/main/assets/asr $A/src/main/assets/web
+          cp $C/sherpa-onnx.aar $A/libs/
+          cp $C/$MODEL/encoder.int8.onnx $C/$MODEL/decoder.int8.onnx $C/$MODEL/joiner.int8.onnx $C/$MODEL/tokens.txt $A/src/main/assets/asr/
+          # 页面备份：不带 8500 条录音（在线取）、Whisper 运行库（App 用不到）和安卓工程本身
+          rsync -a --exclude audio --exclude android --exclude stt linking-practice/ $A/src/main/assets/web/linking-practice/
+          du -sh $A/src/main/assets/* $A/libs/*
+
+      - name: 编译测试版（多带 x86_64，给模拟器用）
+        working-directory: linking-practice/android
+        env:
+          RUN: ${{ github.run_number }}
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace :app:assembleRelease -Pabis=arm64-v8a,x86_64
+          mv app/build/outputs/apk/release/app-release.apk $RUNNER_TEMP/test.apk
+          ls -la $RUNNER_TEMP/test.apk
+
+      - name: 准备测试语音
+        run: node linking-practice/android/ci/clips.js "$GITHUB_WORKSPACE" $RUNNER_TEMP/clips.json 8
+
+      - name: 打开 KVM（模拟器加速）
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: 模拟器上端到端测试
+        id: e2e
+        continue-on-error: true
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          ram-size: 6144M
+          disk-size: 8G
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none -camera-front none
+          disable-animations: true
+          script: bash linking-practice/android/ci/e2e.sh $RUNNER_TEMP/test.apk $RUNNER_TEMP/clips.json $RUNNER_TEMP/e2e
+
+      - name: 上传测试报告和截图
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p $RUNNER_TEMP/e2e
+          cd $RUNNER_TEMP/e2e
+          echo "run ${{ github.run_number }} · e2e=${{ steps.e2e.outcome }} · $(date -u +%FT%TZ)" >> report.txt
+          ls -la
+          gh release view dailyenglish-test -R $GITHUB_REPOSITORY >/dev/null 2>&1 || gh release create dailyenglish-test -R $GITHUB_REPOSITORY --prerelease --title "每日美语 自动测试报告" --notes "安卓模拟器上的端到端测试结果（每次打包覆盖）。"
+          gh release upload dailyenglish-test -R $GITHUB_REPOSITORY --clobber * || true
+
+      - name: 测试没通过就不发布
+        if: steps.e2e.outcome != 'success'
+        run: |
+          cat $RUNNER_TEMP/e2e/report.txt || true
+          exit 1
+
+      - name: 编译正式版（只带手机用的 arm64）
+        working-directory: linking-practice/android
+        env:
+          RUN: ${{ github.run_number }}
+        run: |
+          ./gradlew --no-daemon --stacktrace :app:assembleRelease -Pabis=arm64-v8a
+          ls -la app/build/outputs/apk/release/
+
+      - name: 发布
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.run_number }}
+        run: |
+          set -e
+          cp linking-practice/android/app/build/outputs/apk/release/app-release.apk DailyEnglish.apk
+          SIZE=$(stat -c%s DailyEnglish.apk)
+          gh release delete dailyenglish-latest --yes --cleanup-tag || true
+          gh release create dailyenglish-latest DailyEnglish.apk \
+            --title "每日美语 安卓安装包 3.$RUN" \
+            --notes "内置 Parakeet 语音识别（不用下载模型），页面联网自动更新。第一次从 2.x 升级要先卸载旧版（旧版签名丢了）。"
+          echo "{\"version\":\"3.$RUN\",\"built\":\"$(date -u +%Y-%m-%dT%H:%MZ)\",\"size\":$SIZE,\"url\":\"https://github.com/sylvenndt/Apps/releases/download/dailyenglish-latest/DailyEnglish.apk\"}" > download/apk.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add download/apk.json
+          git commit -m "每日美语：安装包 3.$RUN"
+          git pull --rebase origin main
+          git push origin HEAD:main
