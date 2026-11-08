@@ -167,6 +167,8 @@ async function first(c){
   const note = await c.eval(`return DSHAPP.updateNote()`);
   log("  在线更新：", note);
   check("在线更新能读到 GitHub 上的版本", /已是最新|已下载新版|还没发布完整/.test(note), note);
+  fs.writeFileSync(`${outDir}/update.txt`, note);
+  if(/已下载新版/.test(note)) check("下载好新版后页面出现更新提示条", await c.eval(`return !!document.getElementById("upd-bar")`));
 
   check("页面没有未捕获的报错", c.errors.length === 0, c.errors.slice(0, 5).join(" || "));
   if(c.console.length) log("  控制台：", c.console.slice(0, 15).join(" || "));
@@ -178,6 +180,13 @@ async function again(c){
   check("重开 App 后学习记录还在", got === want, `${got} / ${want}`);
   const href = await c.eval(`return location.href`);
   check("重开后还是同一个地址", href.startsWith("https://appassets.androidplatform.net/"), href);
+  const note = fs.existsSync(`${outDir}/update.txt`) ? fs.readFileSync(`${outDir}/update.txt`, "utf8") : "";
+  const m = note.match(/已下载新版 (\d+)/);
+  if(m){
+    const v = await c.eval(`return { web: DSHAPP.webVersion(), page: APP_VERSION, bundled: DSHAPP.bundledWeb() }`);
+    log("  重开后的页面版本：", JSON.stringify(v));
+    check("重开后用的是下载的新版页面", v.web === +m[1] && v.page === +m[1] && v.bundled < v.web, JSON.stringify(v));
+  }
   shot("05-reopen");
 }
 

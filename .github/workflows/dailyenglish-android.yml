@@ -74,7 +74,14 @@ jobs:
           RUN: ${{ github.run_number }}
         run: |
           chmod +x gradlew
+          # 测试版把自带页面的版本号减 1，模拟器里就会走一遍「联网下载新版页面」
+          SW=app/src/main/assets/web/linking-practice/sw.js
+          cp $SW $RUNNER_TEMP/sw.js.bak
+          V=$(grep -oP 'const V = "\?v=\K[0-9]+' $SW)
+          sed -i "s/const V = \"?v=$V\"/const V = \"?v=$((V-1))\"/" $SW
+          grep -n "const V" $SW
           ./gradlew --no-daemon --stacktrace :app:assembleRelease -Pabis=arm64-v8a,x86_64
+          cp $RUNNER_TEMP/sw.js.bak $SW
           mv app/build/outputs/apk/release/app-release.apk $RUNNER_TEMP/test.apk
           ls -la $RUNNER_TEMP/test.apk
 
