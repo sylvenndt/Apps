@@ -1,8 +1,8 @@
 /* 离线缓存：页面先给缓存（秒开），新版本在后台装好后由页面顶部提示条接管；
    其余同源文件缓存优先。顺便给页面加上跨源隔离头，让 AI 语音可以多核运算。
    录好的语音（audio/*.ogg）单独存在 fluent-audio-v1 里，App 更新时不会被清掉。 */
-const CACHE = "daily-english-v35";
-const V = "?v=35";
+const CACHE = "daily-english-v36";
+const V = "?v=36";
 const AUDIO_CACHE = "fluent-audio-v1";
 const CORE = ["./", "index.html", "styles.css" + V, "tts-bridge.js" + V, "data.js" + V, "emotion.js" + V, "words.js" + V, "vocab.js" + V, "linking.js" + V, "core.js" + V, "ai.js" + V, "replies_zh.js" + V, "neural.js" + V, "stt.js" + V, "pron.js" + V, "app.js" + V, "manifest.json", "icon-192.png", "icon-512.png", "icon-180.png"];
 

@@ -381,3 +381,16 @@ a.btn{text-decoration:none}
 .icon-btn:active{transform:scale(.94)}
 .me-btn:focus-visible,.btn:focus-visible,.chip:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
 @media (prefers-reduced-motion:reduce){.btn,.chip,.icon-btn,.me-btn{transition:none}.btn:active,.chip:active{transform:none}}
+/* 按键反馈（v36）：所有可点的东西都有按下反馈 */
+a,button,.btn,.chip,.icon-btn,.tabs a,.me-btn,.card,.hf-card,.lib-link,.row[data-act],.item{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.tabs a{transition:transform .12s ease,color .14s ease}
+.tabs a:active{transform:scale(.93);color:var(--ink)}
+.tabs a:active svg{transform:scale(.9)}
+.tabs a svg{transition:transform .12s ease}
+.card,.hf-card,.lib-link,.item{transition:transform .14s ease,background .14s ease,box-shadow .14s ease}
+.card:active,.hf-card:active,.item:active{transform:scale(.988);background:var(--sunk)}
+.lib-link:active{transform:scale(.99);opacity:.72}
+.btn:active,.btn.ghost:active,.btn.soft:active{filter:brightness(.97)}
+.chip.on:active{filter:brightness(.97)}
+.composer .btn:active,.me-btn:active{transform:scale(.92)}
+@media (prefers-reduced-motion:reduce){.tabs a,.tabs a svg,.card,.hf-card,.lib-link,.item{transition:none}.tabs a:active,.card:active,.hf-card:active,.item:active,.lib-link:active{transform:none}}

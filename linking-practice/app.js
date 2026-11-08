@@ -1705,13 +1705,22 @@ Views.me.renderPron = function(){
 
 /* ================= 跟读识别 ================= */
 ["fluent-stt", "fluent-mic"].forEach(ev => document.addEventListener(ev, () => { if(location.hash === "#me") Views.me.renderStt(); }));
+document.addEventListener("visibilitychange", () => {
+  if(document.hidden || location.hash !== "#me") return;
+  Views.me._micQueried = false;
+  Mic.query().then(() => Views.me.renderStt());
+});
 Views.me.renderStt = function(){
   const box = $("#stt-box"); if(!box) return;
+  if(window.DSHREC && window.DSHREC.ready()) Mic.state = "granted";
   if(!this._micQueried){ this._micQueried = true; Mic.query().then(() => this.renderStt()); }
   const eng = Settings.get("srEngine"), now = Listener.engine(), m = Whisper.model(), st = Whisper.state;
-  const micLine = !Mic.supported() ? `<span class="no">这个浏览器不能用麦克风</span>${IN_APP_BROWSER ? "，请复制网址到 Safari 或 Chrome 打开" : "，请用 Safari 或 Chrome 打开"}。`
+  const natMic = window.DSHREC ? !!window.DSHREC.ready() : null;
+  const micLine = natMic === true ? `<span class="ok">麦克风已就绪</span>（App 直接录音，不经过浏览器）`
+    : !Mic.supported() ? `<span class="no">这个浏览器不能用麦克风</span>${IN_APP_BROWSER ? "，请复制网址到 Safari 或 Chrome 打开" : "，请用 Safari 或 Chrome 打开"}。`
     : Mic.state === "granted" ? `<span class="ok">已允许使用麦克风</span>`
     : Mic.state === "denied" ? `<span class="no">麦克风权限被拒绝了</span><br><span class="small">${esc(MIC_FIX)}</span>`
+    : natMic === false ? `App 还没拿到录音权限。点下面「允许使用麦克风」，系统弹窗里选「允许」；没弹窗的话，点「打开系统设置」，把「权限 → 麦克风」打开，回到这里会自动变成已就绪。`
     : `还没允许使用麦克风。点下面的按钮，手机会弹出「允许使用麦克风」，点「允许」。`;
   const model = st === "ready" ? `<span class="ok">识别模型已就绪</span>（${esc(m.name)}）`
     : st === "loading" ? `正在下载识别模型… <b>${Math.round(Whisper.progress * 100)}%</b>（已下载 ${Whisper.gotMb.toFixed(0)}MB / 约${m.mb}MB${Whisper.rate > 0 ? "，" + (Whisper.rate / 1048576).toFixed(1) + "MB/s，还要 " + fmtLeft((m.mb * 1048576 - Whisper.gotMb * 1048576) / Whisper.rate) : ""}）<div class="bar2"><i style="width:${Math.round(Whisper.progress * 100)}%"></i></div><p class="small muted" style="margin-top:6px">${Whisper.src ? "下载源：" + Whisper.src + "。" : ""}页面别关，关了就从头下。</p>`
@@ -1720,7 +1729,7 @@ Views.me.renderStt = function(){
   const nowTxt = now === "local" ? "现在用的是：手机上识别" : now === "system" ? "现在用的是：手机自带识别" : "这个浏览器没法识别";
   box.innerHTML = `
     <p class="small">${micLine}</p>
-    ${Mic.supported() && Mic.state !== "granted" ? `<button class="btn line sm" style="--c:var(--green);margin-top:8px" id="stt-mic">${ICON.mic}<span>允许使用麦克风</span></button>` : ""}
+    ${Mic.supported() && Mic.state !== "granted" ? `<div class="row wrap" style="gap:8px;margin-top:8px"><button class="btn line sm" style="--c:var(--green)" id="stt-mic">${ICON.mic}<span>允许使用麦克风</span></button>${window.DSHREC && !window.DSHREC.ready() ? `<button class="btn ghost sm" id="stt-ask">重新申请</button><button class="btn ghost sm" id="stt-settings">打开系统设置</button>` : ""}</div>` : ""}
     <div class="field" style="margin-top:14px"><label>用哪种识别 <span class="small muted">${nowTxt}</span></label>
       <div class="chips" style="flex-wrap:wrap">
         ${[["auto", "自动"], ["local", "手机上识别"], ["system", "手机自带识别"]].map(([k, n]) => `<button class="chip${eng === k ? " on" : ""}" data-sre="${k}">${n}</button>`).join("")}
@@ -1738,6 +1747,8 @@ Views.me.renderStt = function(){
     <p class="small" id="stt-res" style="margin-top:10px">${this._sttMsg || ""}</p>`;
   const keep = fn => () => { const y = window.scrollY; fn(); this.renderStt(); window.scrollTo(0, y); };
   const mb = $("#stt-mic"); if(mb) mb.onclick = async () => { const r = await Mic.ensure(); toast(r.ok ? "麦克风已允许" : srErrorText(r.error)); this.renderStt(); };
+  const askB = $("#stt-ask"); if(askB) askB.onclick = () => { try { window.DSHREC.ask(); } catch(e) {} setTimeout(() => { this._micQueried = false; this.renderStt(); }, 800); };
+  const setB = $("#stt-settings"); if(setB) setB.onclick = () => { try { window.DSHREC.settings(); } catch(e) { toast("打不开设置，请手动去系统设置里找「每日美语」"); } };
   $$("[data-sre]").forEach(b => b.onclick = keep(() => Settings.set("srEngine", b.dataset.sre)));
   $$("[data-stm]").forEach(b => b.onclick = keep(() => { Settings.set("sttModel", b.dataset.stm); if(Whisper.state === "ready" || Whisper.state === "loading") Whisper.reset(); }));
   const dl = $("#stt-dl"); if(dl) dl.onclick = keep(() => Whisper.load());
