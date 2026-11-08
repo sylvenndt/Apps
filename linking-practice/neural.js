@@ -3,6 +3,8 @@
    ① 句库里的句子和单词已经提前用 Kokoro 在电脑上生成好，放在本站 audio/ 目录（Clips），点了直接播放，不用等。
    ② 没录过的句子（AI 教练的回复、自己输入的句子）才在手机上现场生成：声音文件放在本站 voices/ 目录；
       主模型（约 90MB）第一次使用时从 Hugging Face 下载，失败则走 hf-mirror.com 镜像。 */
+const IS_APP_NEURAL = /[?&]app=1/.test(location.search);
+const CLIP_BASE = IS_APP_NEURAL ? "https://sylvenndt.github.io/Apps/linking-practice/audio/" : "audio/";
 const KOKORO_VOICES = [
   { id: "af_heart",   name: "Heart",    accent: "us", gender: "f", desc: "温暖亲切，像好朋友聊天" },
   { id: "af_bella",   name: "Bella",    accent: "us", gender: "f", desc: "活泼有感染力，像咖啡店店员、派对上的朋友" },
@@ -92,18 +94,18 @@ const cyrb53 = (str, seed = 0) => {
 const normText = t => String(t || "").trim().replace(/\s+/g, " ");
 const AUDIO_CACHE = "fluent-audio-v1";
 const Clips = {
-  idx: null, rev: {}, revTag: "", base: "audio/", count: 0, bytes: 0, loading: null, mem: new Map(), ok: null, dl: null,
+  idx: null, rev: {}, revTag: "", base: CLIP_BASE, count: 0, bytes: 0, loading: null, mem: new Map(), ok: null, dl: null,
   supported(){
     if(this.ok === null){ try{ this.ok = !!new Audio().canPlayType('audio/ogg; codecs="opus"'); }catch(_){ this.ok = false; } }
     return this.ok;
   },
   load(){
     if(this.idx || this.loading || !this.supported() || typeof fetch === "undefined") return this.loading;
-    this.loading = fetch("audio/index.json" + AUDIO_V).then(r => { if(!r.ok) throw new Error(r.status); return r.json(); }).then(j => {
+    this.loading = fetch(CLIP_BASE + "index.json" + AUDIO_V).then(r => { if(!r.ok) throw new Error(r.status); return r.json(); }).then(j => {
       const idx = {}; let n = 0;
       for(const v in j.voices){ const set = new Set(j.voices[v] ? j.voices[v].split(" ") : []); idx[v] = set; n += set.size; }
       const rev = {}; for(const v in (j.rev || {})) rev[v] = new Set(j.rev[v].split(" "));
-      this.idx = idx; this.rev = rev; this.revTag = j.revTag || "1"; this.base = j.base || "audio/"; this.count = n; this.bytes = j.bytes || 0;
+      this.idx = idx; this.rev = rev; this.revTag = j.revTag || "1"; this.base = IS_APP_NEURAL ? CLIP_BASE : (j.base || "audio/"); this.count = n; this.bytes = j.bytes || 0;
       document.dispatchEvent(new Event("fluent-neural"));
       if(store.get("clipsPruned") !== AUDIO_V){ const go = () => this.prune(); if("requestIdleCallback" in window) requestIdleCallback(go, { timeout: 8000 }); else setTimeout(go, 5000); }
     }).catch(() => { this.loading = null; });
@@ -192,16 +194,17 @@ function workerSource(voiceBase, urls){
   return `
 const VOICE_BASE = ${JSON.stringify(voiceBase)};
 const URLS = ${JSON.stringify(urls)};
-const HF = "https://huggingface.co/", MIRROR = "https://hf-mirror.com/";
-let useMirror = false;
+const HF = "https://huggingface.co/", MIRROR = "https://modelscope.cn/models/";
+let useMirror = false, srcTag = "";
 const realFetch = self.fetch.bind(self);
 self.fetch = async (input, init) => {
   const url = typeof input === "string" ? input : (input && input.url) || String(input);
   const m = url.match(/Kokoro-82M-v1\\.0-ONNX\\/resolve\\/main\\/voices\\/([a-z_]+)\\.bin/);
   if(m) return realFetch(VOICE_BASE + m[1] + ".bin", init);
   if(url.startsWith(HF)){
-    if(!useMirror){ try{ const r = await realFetch(url, init); if(r.ok) return r; }catch(e){} useMirror = true; }
-    return realFetch(MIRROR + url.slice(HF.length), init);
+    const ms = MIRROR + url.slice(HF.length).replace("/resolve/main/", "/resolve/master/");
+    if(!useMirror){ try{ const r = await realFetch(ms, init); if(r.ok){ srcTag = "ModelScope"; return r; } }catch(e){} useMirror = true; }
+    return realFetch(ms, init);
   }
   return realFetch(input, init);
 };
@@ -214,7 +217,7 @@ async function load(){
     dtype: "q8", device: "wasm",
     progress_callback: p => self.postMessage({ type: "progress", p: { status: p.status, file: p.file, loaded: p.loaded, total: p.total } })
   });
-  self.postMessage({ type: "ready", mirror: useMirror });
+  self.postMessage({ type: "ready", mirror: useMirror, src: srcTag });
 }
 self.onmessage = async e => {
   const d = e.data;

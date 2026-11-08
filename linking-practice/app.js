@@ -1918,3 +1918,21 @@ if("serviceWorker" in navigator && (location.protocol === "https:" || location.h
   });
 }
 Perf.boot = Math.round(performance.now());
+
+/* 按下反馈（v38）：手指一按下就立刻有反应，不依赖 :active */
+(function(){
+  var sel = "button,a,.chip,.card,.item,.lib-link,.me-btn,.tabs a,.row[data-act],.field";
+  var cur = null, t = 0;
+  function clear(){ if(cur){ cur.classList.remove("tap"); cur = null; } }
+  document.addEventListener("pointerdown", function(e){
+    var el = e.target && e.target.closest ? e.target.closest(sel) : null;
+    if(!el) return;
+    if(cur && cur !== el) cur.classList.remove("tap");
+    el.classList.add("tap"); cur = el;
+    clearTimeout(t); t = setTimeout(clear, 240);
+  }, { passive: true });
+  document.addEventListener("pointerup", function(){
+    clearTimeout(t); t = setTimeout(clear, 90);
+  }, { passive: true });
+  document.addEventListener("pointercancel", clear, { passive: true });
+})();

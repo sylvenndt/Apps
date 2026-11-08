@@ -394,3 +394,7 @@ a,button,.btn,.chip,.icon-btn,.tabs a,.me-btn,.card,.hf-card,.lib-link,.row[data
 .chip.on:active{filter:brightness(.97)}
 .composer .btn:active,.me-btn:active{transform:scale(.92)}
 @media (prefers-reduced-motion:reduce){.tabs a,.tabs a svg,.card,.hf-card,.lib-link,.item{transition:none}.tabs a:active,.card:active,.hf-card:active,.item:active,.lib-link:active{transform:none}}
+/* 按下反馈（v38）：JS 加的 .tap 类，比 :active 稳 */
+.tap{transform:scale(.955);filter:brightness(.92);transition:transform .07s ease,filter .07s ease}
+.tabs a.tap{transform:scale(.9)}
+.me-btn.tap{transform:scale(.88)}
