@@ -1689,11 +1689,12 @@ Views.me.renderPron = function(){
     <div id="pr-out"></div>
     <details class="small" style="margin-top:10px"><summary class="link">怎么申请免费的 Azure 密钥（约 10 分钟）</summary>
       <ol style="padding-left:20px;margin:8px 0;line-height:1.7">
-        <li>打开 azure.microsoft.com，点「免费试用」，用微软账号登录（没有就注册一个）。注册要手机号验证，还要绑一张 Visa 或万事达卡验证身份，免费档不会扣钱。</li>
+        <li>打开 azure.microsoft.com（国际版，不是世纪互联的 azure.cn），点「免费试用」，用微软账号登录（没有就注册一个）。注册要手机号验证，还要绑一张 Visa 或万事达卡验证身份，免费档不会扣钱。</li>
         <li>登录 portal.azure.com，在顶部搜索框搜「语音服务」（Speech services），点「创建」。</li>
         <li>「订阅」选默认的；「资源组」点「新建」随便起个名；「区域」选 East Asia（香港）或 Japan East；「名称」随便填；<b>「定价层」一定选 Free F0</b>。</li>
         <li>点「查看 + 创建」→「创建」，等一分钟部署完成，点「转到资源」。</li>
         <li>左边菜单点「密钥和终结点」，复制「密钥 1」粘贴到上面，「区域」选和第 3 步一样的。</li>
+        <li><b>30 天后要「升级」一次</b>：免费试用账号满 30 天会被停用，密钥跟着失效（打分会报 401/403）。收到提醒或失效时，在 portal.azure.com 的「订阅」里点「升级」改成「即用即付」。F0 免费档升级后也不收钱，超出 5 小时只是当月停用。</li>
       </ol>
       <span class="muted">国内网络打开 Azure 网站和打分时都建议开 VPN。密钥只保存在这台手机上。</span>
     </details>`;
