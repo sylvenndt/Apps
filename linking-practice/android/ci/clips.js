@@ -1,3 +1,4 @@
+// （CI 现在直接用 clips/ 里转好的 PCM；这个脚本用来重新挑选）
 // 挑几条句库里录好的语音（Kokoro 录的 .ogg）和它们的原文，给安卓自动测试用：把声音交给 App 里的识别，看认得对不对。
 // 用法：node clips.js <仓库根目录> <输出 json> [条数]
 const fs = require('fs'), vm = require('vm'), path = require('path');

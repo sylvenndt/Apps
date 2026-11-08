@@ -21,6 +21,8 @@ adb shell am start -W -n $PKG/.MainActivity >/dev/null
 sleep 8
 node "$DIR/e2e.mjs" again "$CLIPS" "$OUT"; R2=$?
 adb logcat -d -v time DshMain:V DshAsr:V DshWeb:V DshPage:V AndroidRuntime:E chromium:W cr_AwContents:W '*:S' > "$OUT/logcat.txt" || true
+# 完整日志里和本 App 有关的部分（查「页面为什么被重建」之类的问题）
+adb logcat -d -v time | grep -E "dailyenglish|Dsh|AndroidRuntime|lowmemorykiller|lmkd|ActivityTaskManager|ActivityManager|WebViewChromium|cr_" | tail -n 3000 > "$OUT/logcat-full.txt" || true
 adb shell dumpsys meminfo $PKG | head -30 > "$OUT/meminfo.txt" || true
 echo "first=$R1 again=$R2" | tee -a "$OUT/report.txt"
 [ $R1 -eq 0 ] && [ $R2 -eq 0 ]

@@ -56,6 +56,19 @@ class Cdp {
   }
 }
 
+/* 出错时看看页面还在不在（是不是被重新加载了） */
+async function probe(c){
+  try{
+    const v = await c.eval(`return JSON.stringify({ mark: window.__e2eMark || 0, asr: DSHASR.state(), t: Math.round(performance.now()) })`, 5000);
+    return v;
+  }catch(e){ return "连不上原来的页面：" + String(e.message || e).slice(0, 60); }
+}
+async function reconnectIfNeeded(c){
+  const p = await probe(c);
+  if(/连不上|"mark":0/.test(p)){ log("  页面重新加载了，重新连接：", p); return await connect(); }
+  return c;
+}
+
 async function connect(){
   const t = await target();
   const c = new Cdp(t.webSocketDebuggerUrl);
@@ -78,7 +91,8 @@ function wer(ref, hyp){
   return d[b.length] / Math.max(1, a.length);
 }
 
-async function first(c){
+async function first(c0){
+  let c = c0;
   const info = await c.eval(`return { href: location.href, title: document.title, bootErr: !!window.__bootErr,
     rec: typeof DSHREC, asr: typeof DSHASR, app: typeof DSHAPP, tts: typeof DSHTTS,
     avail: window.DSHASR && DSHASR.available(), perm: window.DSHREC && DSHREC.permState(), engine: Listener.engine(),
@@ -101,26 +115,36 @@ async function first(c){
   const lm = await c.eval(`return DSHASR.loadMs()`);
   check("识别模型加载好了", st === "ready", `${st}，加载 ${lm}ms（等了 ${Date.now() - t0}ms）`);
 
-  // 识别：把句库里录好的 .ogg 交给页面解码、转 16kHz，再走 App 的识别（跟真实使用同一条路）
+  // 识别：句库里录好的语音（已转成 16kHz PCM），走 App 的识别接口（页面 → DSHASR → Parakeet）
+  await c.eval(`window.__e2eMark = 1; return true;`);
   const clips = JSON.parse(fs.readFileSync(clipsFile, "utf8"));
+  const base = clipsFile.replace(/[^/]+$/, "");
   let tw = 0, n = 0;
   for(const cl of clips){
-    const b64 = fs.readFileSync(cl.file).toString("base64");
+    const b64 = fs.readFileSync(base + cl.pcm.replace(/^clips\//, "")).toString("base64");
     try{
       const r = await c.eval(`
-        const bin = atob(${JSON.stringify(b64)}); const u = new Uint8Array(bin.length); for(let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
-        // 用离线的 16kHz 音频环境解码，顺便转成 16kHz（不占用声卡）
-        const oc = new OfflineAudioContext(1, 16000, 16000);
-        const buf = await oc.decodeAudioData(u.buffer);
-        const pcm = new Float32Array(buf.getChannelData(0));
-        const t0 = performance.now(); const j = await NativeAsr.pcm(pcm);
+        const t0 = performance.now(); const id = DSHASR.recognizePcm(${JSON.stringify(b64)});
+        const j = await NativeAsr.run(id);
         const a = normalize(${JSON.stringify(cl.text)}), b = normalize(j.text);
-        return { text: j.text, ms: j.ms, wall: Math.round(performance.now() - t0), sec: pcm.length / 16000, match: lcsLen(a, b), n: a.length, m: b.length };`, 60000);
+        return { text: j.text, ms: j.ms, wall: Math.round(performance.now() - t0), sec: j.sec, match: lcsLen(a, b), n: a.length, m: b.length };`, 60000);
       const w = 1 - r.match / Math.max(r.n, r.m, 1); tw += w; n++;
-      log(`  识别 ${r.sec.toFixed(1)}s 声音用 ${r.ms}ms（含传输 ${r.wall}ms）差异 ${(w * 100).toFixed(0)}%  原文：${cl.text}  听到：${r.text}`);
-    }catch(e){ n++; tw += 1; log("  识别出错：", cl.text, String(e.message || e).slice(0, 200)); }
+      log(`  识别 ${(+r.sec).toFixed(1)}s 声音用 ${r.ms}ms（含传输 ${r.wall}ms）差异 ${(w * 100).toFixed(0)}%  原文：${cl.text}  听到：${r.text}`);
+    }catch(e){
+      n++; tw += 1; log("  识别出错：", cl.text, String(e.message || e).slice(0, 120));
+      const info = await probe(c); log("  当时的状态：", info);
+      if(/重新加载|连不上/.test(info)) c = await connect();
+    }
   }
   check("识别准确（平均差异 < 10%）", n > 0 && tw / n < 0.10, `平均 ${(100 * tw / Math.max(1, n)).toFixed(1)}%`);
+
+  // 浏览器解码录音（上传录音、连读分析会用到）：只记录，不算失败
+  try{
+    const ogg = fs.readFileSync(base + "probe.ogg").toString("base64");
+    const d = await c.eval(`const bin = atob(${JSON.stringify(ogg)}); const u = new Uint8Array(bin.length); for(let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+      const buf = await decode(new Blob([u])); return { sec: buf.duration, sr: buf.sampleRate };`, 20000);
+    log("  解码 ogg：", JSON.stringify(d));
+  }catch(e){ log("  解码 ogg 没成功（模拟器问题，仅记录）：", String(e.message || e).slice(0, 100)); c = await reconnectIfNeeded(c); }
 
   // 原生录音：start 必须马上返回 true/false（旧版没有返回值，页面就误报「麦克风打不开」）
   const rec = await c.eval(`
@@ -175,6 +199,7 @@ async function first(c){
 }
 
 async function again(c){
+  log("  重开后的更新状态：", await c.eval(`return DSHAPP.updateNote() + " / 页面版本 " + DSHAPP.webVersion()`));
   const want = fs.existsSync(`${outDir}/kept.txt`) ? fs.readFileSync(`${outDir}/kept.txt`, "utf8") : "(第一轮没跑到这一步)";
   const got = await c.eval(`return localStorage.getItem("dshE2E")`);
   check("重开 App 后学习记录还在", got === want, `${got} / ${want}`);

@@ -5,3 +5,4 @@
 *.wav binary
 *.bin binary
 *.apk binary
+*.pcm binary

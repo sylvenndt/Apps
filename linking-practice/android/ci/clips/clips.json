@@ -1,0 +1,34 @@
+[
+ {
+  "text": "Can I get a medium iced latte with oat milk?",
+  "pcm": "clips/00.pcm"
+ },
+ {
+  "text": "Sure. Anything else for you?",
+  "pcm": "clips/01.pcm"
+ },
+ {
+  "text": "Let me get back to you on that.",
+  "pcm": "clips/02.pcm"
+ },
+ {
+  "text": "Sounds good. No rush.",
+  "pcm": "clips/03.pcm"
+ },
+ {
+  "text": "Yes, it's served from seven to ten.",
+  "pcm": "clips/04.pcm"
+ },
+ {
+  "text": "Which stop should I get off at?",
+  "pcm": "clips/05.pcm"
+ },
+ {
+  "text": "Get off at Union Station.",
+  "pcm": "clips/06.pcm"
+ },
+ {
+  "text": "I had a really good time tonight.",
+  "pcm": "clips/07.pcm"
+ }
+]

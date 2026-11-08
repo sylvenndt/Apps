@@ -85,9 +85,6 @@ jobs:
           mv app/build/outputs/apk/release/app-release.apk $RUNNER_TEMP/test.apk
           ls -la $RUNNER_TEMP/test.apk
 
-      - name: 准备测试语音
-        run: node linking-practice/android/ci/clips.js "$GITHUB_WORKSPACE" $RUNNER_TEMP/clips.json 8
-
       - name: 打开 KVM（模拟器加速）
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -107,7 +104,7 @@ jobs:
           emulator-boot-timeout: 900
           emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none -camera-front none
           disable-animations: true
-          script: bash linking-practice/android/ci/e2e.sh $RUNNER_TEMP/test.apk $RUNNER_TEMP/clips.json $RUNNER_TEMP/e2e
+          script: bash linking-practice/android/ci/e2e.sh $RUNNER_TEMP/test.apk $GITHUB_WORKSPACE/linking-practice/android/ci/clips/clips.json $RUNNER_TEMP/e2e
 
       - name: 上传测试报告和截图
         if: always()
