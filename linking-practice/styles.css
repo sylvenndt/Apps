@@ -71,7 +71,7 @@ p{margin:0}
 
 /* 顶部 */
 .top{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:22px}
-.streak{display:flex;flex-direction:column;align-items:flex-end}
+.streak{display:flex;flex-direction:column;align-items:flex-end;margin-right:52px} /* 右上角浮着「我的」按钮，连续天数让开它 */
 .streak b{font-size:34px;line-height:1;font-weight:800;font-variant-numeric:tabular-nums}
 .streak span{font-size:12px;color:var(--muted);margin-top:3px}
 
@@ -398,3 +398,5 @@ a,button,.btn,.chip,.icon-btn,.tabs a,.me-btn,.card,.hf-card,.lib-link,.row[data
 .tap{transform:scale(.955);filter:brightness(.92);transition:transform .07s ease,filter .07s ease}
 .tabs a.tap{transform:scale(.9)}
 .me-btn.tap{transform:scale(.88)}
+/* 页面顶部那一行（返回、标题、右边的进度）让开右上角浮着的「我的」按钮 */
+.view > .row.between:first-child{padding-right:52px}
