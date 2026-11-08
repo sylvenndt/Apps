@@ -111,7 +111,15 @@ async function first(c0){
 
   // 识别模型加载
   const t0 = Date.now(); let st = "", seen = new Set();
-  for(let i = 0; i < 300; i++){ st = await c.eval(`return DSHASR.state()`); seen.add(st.replace(/:\d+$/, "")); if(st === "ready" || st.startsWith("error")) break; await sleep(1000); }
+  const bundled = await c.eval(`return DSHASR.bundled()`);
+  log("  安装包里带模型：", bundled);
+  for(let i = 0; i < 600; i++){
+    st = await c.eval(`return DSHASR.state()`); seen.add(st.split(":")[0]);
+    if(st === "need-download"){ log("  用的是计量网络，模拟用户点「下载」"); await c.eval(`DSHASR.download(); return true;`); }
+    if(i % 15 === 0 && /^(download|unpacking)/.test(st)) log("   ", st);
+    if(st === "ready" || st.startsWith("error")) break;
+    await sleep(1000);
+  }
   log("  模型状态经过：", [...seen].join(" → "));
   const lm = await c.eval(`return DSHASR.loadMs()`);
   check("识别模型加载好了", st === "ready", `${st}，加载 ${lm}ms（等了 ${Date.now() - t0}ms）`);

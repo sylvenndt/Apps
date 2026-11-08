@@ -496,6 +496,39 @@ function localListen(opts){
 const NativeAsr = {
   state(){ try{ return window.DSHASR.state(); }catch(_){ return "error:bridge"; } },
   name(){ try{ return window.DSHASR.name(); }catch(_){ return "Parakeet"; } },
+  /* 模型准备进度的中文说明；就绪或出错返回空 */
+  progressText(st){
+    st = st || this.state();
+    const p = st.split(":");
+    if(p[0] === "download") return `正在下载识别模型 ${p[1]}%${+p[2] > 0 ? `（${p[2]}MB/s，共 ${p[3]}MB）` : ""}…只需这一次，以后更新 App 也不用再下`;
+    if(p[0] === "unpacking") return `正在解压识别模型 ${p[1]}%（只需一次，不用联网，十几秒到半分钟）…`;
+    if(st === "verifying") return "正在核对识别模型…";
+    if(st === "loading") return "识别模型正在启动（打开 App 后要几秒）…";
+    if(st === "need-download") return "识别模型还没下载";
+    return "";
+  },
+  /* 模型没准备好时：要下载就先问（用流量时），然后等它下载/解压完，期间显示进度；返回 null 表示可以开始，否则是错误码 */
+  async ensure(status, isCancelled){
+    let st = this.state();
+    if(st === "off"){ try{ window.DSHASR.load(); }catch(_){} await new Promise(r => setTimeout(r, 400)); st = this.state(); }
+    if(st === "need-download"){
+      const ok = window.confirm("跟读和口语要用的识别模型还没下载：约 410MB，只下载这一次，以后更新 App 也不用再下。\n\n现在用的是移动数据，确定现在下载吗？（连上 Wi-Fi 后打开 App 会自动下载）");
+      if(!ok) return "model-declined";
+      try{ window.DSHASR.download(); }catch(_){}
+      await new Promise(r => setTimeout(r, 400));
+    }
+    /* 下载、解压、核对的时候等着（启动 loading 不用等：可以边录边启动） */
+    for(;;){
+      st = this.state();
+      if(!/^(download|unpacking|verifying|need-download)/.test(st)) break;
+      if(isCancelled()) return "aborted";
+      if(st === "need-download") return "model-declined";
+      status(this.progressText(st) + "（下好后自动开始听）");
+      await new Promise(r => setTimeout(r, 500));
+    }
+    if(/^error/.test(st)) return "model-failed";
+    return null;
+  },
   /* 交给 App 识别，等结果；返回 { text, ms } 或抛错 */
   async run(id, onWait){
     const t0 = Date.now();
@@ -525,15 +558,16 @@ function nativeListen(opts){
       if(!m.ok) return { text: "", error: m.error };
     }
     if(cancelled) return { text: "", error: "aborted" };
-    try{ if(NativeAsr.state() === "off") window.DSHASR.load(); }catch(_){}
+    const prep = await NativeAsr.ensure(status, () => cancelled);
+    if(prep) return { text: "", error: prep, detail: NativeAsr.state().replace(/^error:/, "") };
+    if(cancelled) return { text: "", error: "aborted" };
     let speaking = false;
     status("正在听…说完停一下会自动结束");
     rec = Mic.record({ maxMs: opts.maxMs || 20000, silenceMs: opts.silenceMs || 1800, onLevel: (lv, sp) => { if(sp && !speaking){ speaking = true; status("听到了，继续说…"); } } });
     const r = await rec.done;
     if(r.error) return { text: "", error: r.error };
     if(!r.speech || r.seconds < 0.3) return { text: "", error: "no-speech", audio: r.wav };
-    const wait = st => status(/^unpacking/.test(st) ? `第一次打开：正在解压识别模型 ${st.split(":")[1] || 0}%（只需一次，不用联网，十几秒到半分钟）…`
-      : st === "loading" ? "识别模型正在启动（打开 App 后要几秒）…" : "识别中…");
+    const wait = st => status(NativeAsr.progressText(st) || "识别中…");
     wait(NativeAsr.state());
     try{
       /* 识别用去掉头尾静音、调好音量的那段，跟回放的是同一段 */
@@ -568,6 +602,8 @@ const SR_ERR_MORE = {
   "mic-init": "麦克风没能启动。把 App 从最近任务里划掉重新打开；还不行就重启一下手机。",
   "mic-blocked": "麦克风权限被关掉了，而且系统不再弹窗询问。去「设置 → 应用 → 每日美语 → 权限 → 麦克风」选「允许」，回到 App 再点一次（「我的 → 跟读识别」里有直达按钮）。",
   "native-failed": "识别出错了，再说一次试试。如果一直这样，把 App 关掉重新打开。",
+  "model-declined": "没下载识别模型，跟读和口语暂时用不了。连上 Wi-Fi 后打开 App 会自动下载，也可以在「我的 → 跟读识别」里点「下载识别模型」。",
+  "model-failed": "识别模型没准备好（下载或解压出错）。到「我的 → 跟读识别」点「重新下载」；下载要能连上 GitHub 或 Hugging Face。",
   "mic-failed": "麦克风没能打开，再点一次试试。",
   "mic-stalled": "麦克风打开了，但没收到声音。再点一次试试；还不行就把 App 关掉重新打开。",
   "mic-unsupported": "这个浏览器不能录音，请用 Safari 或 Chrome 打开。",

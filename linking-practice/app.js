@@ -1745,28 +1745,34 @@ Views.me.renderStt = function(){
   if(NATIVE_ASR){
     /* 安装版：原生录音 + 内置识别，没有模型可选、也不用下载 */
     const np = Mic.nativePerm(), ast = NativeAsr.state();
+    let bundledAsr = true; try{ if(typeof window.DSHASR.bundled === "function") bundledAsr = !!window.DSHASR.bundled(); }catch(_){}
     const nm = esc(NativeAsr.name());
     const mic = np === "granted" ? `<span class="ok">麦克风已就绪</span>（App 直接录音）`
       : np === "blocked" ? `<span class="no">麦克风权限被关掉了</span>，系统不会再弹窗。点「打开系统设置」→「权限」→「麦克风」→「允许」，回到这里会自动变成已就绪。`
       : np === "denied" ? `<span class="no">没给麦克风权限</span>。点「允许使用麦克风」，系统弹窗里选「允许」。`
       : `还没给麦克风权限。点「允许使用麦克风」，系统弹窗里选「允许」。`;
     let lm = 0; try{ lm = window.DSHASR.loadMs(); }catch(_){}
+    const prog = /^(download|unpacking)/.test(ast) ? +ast.split(":")[1] || 0 : -1;
     const asr = ast === "ready" ? `<span class="ok">识别模型已就绪</span>${lm ? `（这次打开用了 ${(lm / 1000).toFixed(1)} 秒启动）` : ""}`
-      : /^unpacking/.test(ast) ? `第一次打开：正在解压识别模型 <b>${esc(ast.split(":")[1] || "0")}%</b>（只需一次，不用联网，十几秒到半分钟）`
-      : ast === "loading" ? `识别模型正在启动…（每次打开 App 后台加载几秒，不用联网）`
-      : /^error/.test(ast) ? `<span class="no">识别模型没启动起来</span>：${esc(ast.replace(/^error:/, ""))}<br><span class="small muted">把 App 从最近任务里划掉重新打开试试。</span>`
+      : ast === "need-download" ? `识别模型还没下载（约 410MB，只需这一次）。现在用的是移动数据，所以没有自动下载；连上 Wi-Fi 后打开 App 会自动下。`
+      : prog >= 0 ? `${esc(NativeAsr.progressText(ast))}<div class="bar2"><i style="width:${prog}%"></i></div>`
+      : ast === "loading" || ast === "verifying" ? esc(NativeAsr.progressText(ast))
+      : /^error/.test(ast) ? `<span class="no">识别模型没准备好</span>：${esc(ast.replace(/^error:/, ""))}`
       : `识别模型会在用到时自动启动。`;
+    const asrBtn = ast === "need-download" ? `<button class="btn line sm" style="--c:var(--blue);margin-top:8px" id="stt-asr-dl">下载识别模型（约 410MB）</button>`
+      : /^error/.test(ast) ? `<button class="btn line sm" style="--c:var(--blue);margin-top:8px" id="stt-asr-dl">重新下载 / 启动</button>` : "";
     let ver = ""; try{ ver = `安装包 ${esc(window.DSHAPP.versionName())} · 页面版本 ${window.DSHAPP.webVersion()}${window.DSHAPP.updateNote() ? " · " + esc(window.DSHAPP.updateNote()) : ""}`; }catch(_){}
     box.innerHTML = `
     <p class="small">${mic}</p>
     ${np !== "granted" ? `<div class="row wrap" style="gap:8px;margin-top:8px">${np !== "blocked" ? `<button class="btn line sm" style="--c:var(--green)" id="stt-mic">${ICON.mic}<span>允许使用麦克风</span></button>` : ""}<button class="btn ghost sm" id="stt-settings">打开系统设置</button></div>` : ""}
     <div class="field" style="margin-top:14px"><label>识别模型 <span class="small muted">${nm}</span></label>
-      <p class="help">NVIDIA 出的英文识别模型，公开测评里准确度排在最前面一档，比之前要下载的 Whisper「最准」还准，口音和连读也认得出。它装在安装包里，在手机上识别：不用下载、不用联网、不依赖 Google。</p>
+      <p class="help">NVIDIA 出的英文识别模型，公开测评里准确度排在最前面一档，比之前要下载的 Whisper「最准」还准，口音和连读也认得出。${bundledAsr ? "它装在安装包里" : "它只在第一次打开时下载一次（约 410MB），以后更新 App 也不用再下"}，在手机上识别：不用联网、不依赖 Google。</p>
       <p class="small" style="margin-top:8px">${asr}</p>
+      ${asrBtn}
     </div>
     ${testRow}
     ${ver ? `<p class="small muted" style="margin-top:12px">${ver} <button class="link" id="stt-upd">检查新版</button></p>` : ""}`;
-    if((ast === "loading" || /^unpacking/.test(ast)) && !this._asrPoll) this._asrPoll = setTimeout(() => { this._asrPoll = null; if(location.hash === "#me") this.renderStt(); }, 1000);
+    if(/^(loading|unpacking|download|verifying)/.test(ast) && !this._asrPoll) this._asrPoll = setTimeout(() => { this._asrPoll = null; if(location.hash === "#me") this.renderStt(); }, 1000);
   } else box.innerHTML = `
     <p class="small">${micLine}</p>
     ${Mic.supported() && Mic.state !== "granted" ? `<div class="row wrap" style="gap:8px;margin-top:8px"><button class="btn line sm" style="--c:var(--green)" id="stt-mic">${ICON.mic}<span>允许使用麦克风</span></button>${window.DSHREC && !window.DSHREC.ready() ? `<button class="btn ghost sm" id="stt-ask">重新申请</button><button class="btn ghost sm" id="stt-settings">打开系统设置</button>` : ""}</div>` : ""}
@@ -1791,6 +1797,7 @@ Views.me.renderStt = function(){
   $$("[data-sre]").forEach(b => b.onclick = keep(() => Settings.set("srEngine", b.dataset.sre)));
   $$("[data-stm]").forEach(b => b.onclick = keep(() => { Settings.set("sttModel", b.dataset.stm); if(Whisper.state === "ready" || Whisper.state === "loading") Whisper.reset(); }));
   const dl = $("#stt-dl"); if(dl) dl.onclick = keep(() => Whisper.load());
+  const adl = $("#stt-asr-dl"); if(adl) adl.onclick = () => { try{ window.DSHASR.download(); }catch(_){} setTimeout(() => this.renderStt(), 500); };
   const up = $("#stt-upd"); if(up) up.onclick = () => { try{ window.DSHAPP.checkUpdate(); toast("正在检查新版…"); setTimeout(() => this.renderStt(), 6000); }catch(_){} };
   const rt = $("#stt-retry"); if(rt) rt.onclick = keep(() => { store.set("srBroken", false); Listener.fails = 0; });
   const msg = html => { this._sttMsg = html; const el = $("#stt-res"); if(el) el.innerHTML = html; bindMine(); };

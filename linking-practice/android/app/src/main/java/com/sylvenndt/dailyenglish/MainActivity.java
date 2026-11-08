@@ -268,6 +268,10 @@ public class MainActivity extends Activity {
         @JavascriptInterface public long loadMs() { return Asr.loadMs(); }
         @JavascriptInterface public long unpackMs() { return Asr.unpackMs(); }
         @JavascriptInterface public void load() { Asr.load(getApplicationContext()); }
+        /** 安装包里带没带模型（精简版不带，第一次要下载） */
+        @JavascriptInterface public boolean bundled() { return Asr.bundled(getAssets()); }
+        /** 用户同意下载模型（用流量时要先问） */
+        @JavascriptInterface public void download() { Asr.allowDownload(getApplicationContext()); }
         /** 识别刚才录的那段 */
         @JavascriptInterface public int recognizeLast() { return Asr.submit(getApplicationContext(), recorder.samples()); }
         /** 识别页面传来的声音（16kHz 16 位小端 PCM 的 base64），比如用 getUserMedia 录的或上传的文件 */

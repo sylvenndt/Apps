@@ -67,13 +67,23 @@ jobs:
           A=linking-practice/android/app
           mkdir -p $A/libs $A/src/main/assets/asr $A/src/main/assets/web
           cp $C/sherpa-onnx.aar $A/libs/
-          cp $C/encoder.int8.onnx.xz $C/$MODEL/decoder.int8.onnx $C/$MODEL/joiner.int8.onnx $C/$MODEL/tokens.txt $A/src/main/assets/asr/
-          stat -c%s $C/$MODEL/encoder.int8.onnx > $A/src/main/assets/asr/encoder.int8.onnx.size
+          # 先不放 encoder：测试版和精简版都是第一次打开再下载；完整版在最后才放进去
+          cp $C/$MODEL/decoder.int8.onnx $C/$MODEL/joiner.int8.onnx $C/$MODEL/tokens.txt $A/src/main/assets/asr/
           # 页面备份：不带 8500 条录音（在线取）、Whisper 运行库（App 用不到）和安卓工程本身
           rsync -a --exclude audio --exclude android --exclude stt linking-practice/ $A/src/main/assets/web/linking-practice/
           du -sh $A/src/main/assets/* $A/libs/*
 
-      - name: 编译测试版（多带 x86_64，给模拟器用）
+      - name: 把压缩好的模型放到 GitHub（精简版第一次打开从这里下载）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view dailyenglish-model -R $GITHUB_REPOSITORY --json assets -q '.assets[].name' 2>/dev/null | grep -qx encoder.int8.onnx.xz; then
+            gh release view dailyenglish-model -R $GITHUB_REPOSITORY >/dev/null 2>&1 || gh release create dailyenglish-model -R $GITHUB_REPOSITORY --title "每日美语 识别模型" --notes "NVIDIA Parakeet TDT 0.6B v2（int8，sherpa-onnx）的 encoder，xz 压缩。App 第一次打开时下载，解压后校验 SHA-256。"
+            gh release upload dailyenglish-model -R $GITHUB_REPOSITORY --clobber ~/dsh-cache/encoder.int8.onnx.xz
+          fi
+          gh release view dailyenglish-model -R $GITHUB_REPOSITORY --json assets -q '.assets[] | .name + " " + (.size|tostring)'
+
+      - name: 编译测试版（精简版，多带 x86_64，给模拟器用）
         working-directory: linking-practice/android
         env:
           RUN: ${{ github.run_number }}
@@ -129,16 +139,19 @@ jobs:
           cat $RUNNER_TEMP/e2e/report.txt || true
           exit 1
 
-      - name: 编译正式版（只带手机用的 arm64）
+      - name: 编译正式版（只带手机用的 arm64）：精简版 + 完整版
         working-directory: linking-practice/android
         env:
           RUN: ${{ github.run_number }}
         run: |
+          set -e
           ./gradlew --no-daemon --stacktrace :app:assembleRelease -Pabis=arm64-v8a
-          ls -la app/build/outputs/apk/release/
-          S=$(stat -c%s app/build/outputs/apk/release/app-release.apk)
-          echo "安装包 $((S / 1048576)) MiB"
-          [ $S -lt 524288000 ] || echo "::warning::安装包超过 500 MiB，聊天里发不了"
+          mv app/build/outputs/apk/release/app-release.apk $RUNNER_TEMP/lite.apk
+          cp ~/dsh-cache/encoder.int8.onnx.xz app/src/main/assets/asr/
+          ./gradlew --no-daemon --stacktrace :app:assembleRelease -Pabis=arm64-v8a
+          mv app/build/outputs/apk/release/app-release.apk $RUNNER_TEMP/full.apk
+          rm app/src/main/assets/asr/encoder.int8.onnx.xz
+          for f in lite full; do echo "$f $(( $(stat -c%s $RUNNER_TEMP/$f.apk) / 1048576 )) MiB"; done
 
       - name: 发布
         env:
@@ -146,13 +159,14 @@ jobs:
           RUN: ${{ github.run_number }}
         run: |
           set -e
-          cp linking-practice/android/app/build/outputs/apk/release/app-release.apk DailyEnglish.apk
-          SIZE=$(stat -c%s DailyEnglish.apk)
+          cp $RUNNER_TEMP/full.apk DailyEnglish.apk
+          cp $RUNNER_TEMP/lite.apk DailyEnglish-lite.apk
+          SIZE=$(stat -c%s DailyEnglish.apk); LITE=$(stat -c%s DailyEnglish-lite.apk)
           gh release delete dailyenglish-latest --yes --cleanup-tag || true
-          gh release create dailyenglish-latest DailyEnglish.apk \
+          gh release create dailyenglish-latest DailyEnglish.apk DailyEnglish-lite.apk \
             --title "每日美语 安卓安装包 3.$RUN" \
-            --notes "内置 Parakeet 语音识别（不用下载模型），页面联网自动更新。第一次从 2.x 升级要先卸载旧版（旧版签名丢了）。"
-          echo "{\"version\":\"3.$RUN\",\"built\":\"$(date -u +%Y-%m-%dT%H:%MZ)\",\"size\":$SIZE,\"url\":\"https://github.com/sylvenndt/Apps/releases/download/dailyenglish-latest/DailyEnglish.apk\"}" > download/apk.json
+            --notes "DailyEnglish.apk：完整版，内置 Parakeet 识别模型，第一次打开解压一次。DailyEnglish-lite.apk：精简版（能在聊天里直接发），第一次打开下载一次模型（约 410MB），以后不用再下。页面联网自动更新。第一次从 2.x 升级要先卸载旧版（旧版签名丢了）。"
+          echo "{\"version\":\"3.$RUN\",\"built\":\"$(date -u +%Y-%m-%dT%H:%MZ)\",\"size\":$SIZE,\"url\":\"https://github.com/sylvenndt/Apps/releases/download/dailyenglish-latest/DailyEnglish.apk\",\"liteSize\":$LITE,\"liteUrl\":\"https://github.com/sylvenndt/Apps/releases/download/dailyenglish-latest/DailyEnglish-lite.apk\"}" > download/apk.json
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add download/apk.json
