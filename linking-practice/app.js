@@ -32,10 +32,24 @@ function renderEn(chunks){
     html += `<span class="w">${esc(t.raw)}</span>`;
     if(i < toks.length - 1){
       const l = byI.get(i);
-      html += l ? `<span class="lk c-${l.cls}" title="${esc(l.kind)}">‿</span>` : bounds.has(i) ? `<span class="sep"></span>` : " ";
+      // 连读符号后面放一个可换行的位置：整串连读的词太长时也能折到下一行
+      html += l ? `<span class="lk c-${l.cls}" title="${esc(l.kind)}">‿</span><wbr>` : bounds.has(i) ? `<span class="sep"></span>` : " ";
     }
   });
   return html;
+}
+
+/* 每句话的中文：默认模糊，点一下显示（想看再看） */
+function zhTap(zh, cls = ""){
+  return zh ? `<p class="zh blur zh-tap${cls ? " " + cls : ""}" title="点一下显示中文">${esc(zh)}</p>` : "";
+}
+document.addEventListener("click", e => { const z = e.target.closest && e.target.closest(".zh-tap"); if(z) z.classList.toggle("show"); });
+/* 「对方可能这样回」：播放按钮 + 英文 + 可点开的中文 */
+function replyHTML(reply, id, label = "对方可能这样回"){
+  if(!reply) return "";
+  return `<div class="row reply-row" style="margin-top:14px;align-items:flex-start">
+    <button class="play sm" id="${id}" style="--c:var(--ink)" aria-label="播放回应">${ICON.play}</button>
+    <div class="grow"><div class="small muted">${label}</div><div style="font-weight:600">${esc(reply)}${emoTag(reply, "sm")}</div>${zhTap(REPLY_ZH[reply] || zhOf(reply), "sm")}</div></div>`;
 }
 
 /* 播放按钮：说话时有波纹 */
@@ -87,10 +101,9 @@ function fixPanel(said){
 const Views = {};
 
 /* ================= 今日 ================= */
-function topicOfDay(){
-  const days = Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 86400000);
-  return days % TOPICS.length;
-}
+/* 「今日话题」每次打开 App 随机换一个（同一次打开里不变） */
+const SESSION_TOPIC = seededShuffle(TOPICS.map((_, k) => k), "topic")[0];
+function topicOfDay(){ return SESSION_TOPIC; }
 function warmToday(){
   if(typeof Neural === "undefined" || !Neural.wanted()) return;
   const ids = [...SRS.dueIds(), ...SRS.newIds(Settings.get("newPerDay"))].slice(0, 25);
@@ -204,7 +217,6 @@ Views.review = {
         <p class="small muted" style="text-align:center" id="rv-tip">${card.single ? "听这个单词，想想它是什么意思、怎么用。" : "只听，别翻译。试着直接想到画面，或者想好怎么回应。"}</p>
         <div class="row" style="justify-content:center;gap:8px;margin-top:12px" id="rv-tools">
           <button class="chip" id="rv-slow">慢速</button>
-          <button class="chip" id="rv-chunks">按意群播放</button>
           <button class="chip" id="rv-reveal">显示英文</button>
         </div>` : `
         ${card.single ? `<p class="zh-big">${esc(card.meaning)}</p><p class="small muted" style="text-align:center">${esc(card.posZh)}，${esc(card.level)}</p>
@@ -221,14 +233,13 @@ Views.review = {
         <div class="row">${bulletHTML(card.scene)}<span class="small muted">${sc ? esc(sc.name) : "我的句子"}${isNew ? "，新句" : ""}</span></div>
         ${front}
         <div id="rv-text" hidden style="margin-top:18px">
-          ${type === "speak" ? `<div class="row" style="margin-bottom:10px"><button class="play sm" id="rv-play" style="--c:var(--blue)" aria-label="播放">${ICON.play}</button><button class="chip" id="rv-slow">慢速</button><button class="chip" id="rv-chunks">按意群</button></div>` : ""}
+          ${type === "speak" ? `<div class="row" style="margin-bottom:10px"><button class="play sm" id="rv-play" style="--c:var(--blue)" aria-label="播放">${ICON.play}</button><button class="chip" id="rv-slow">慢速</button></div>` : ""}
           <div class="en">${renderEn(card.chunks)}</div>
           ${emoTag(card.en) ? `<p class="emo-line">语气：${emoTag(card.en)}</p>` : ""}
           ${card.note ? `<p class="note">${esc(card.note)}</p>` : ""}
-          ${type === "listen" ? `<p class="zh blur" id="rv-zh" style="margin-top:6px" title="点一下显示中文">${esc(card.zh || "（没有中文）")}</p>` : `<p class="small" id="rv-cmp" style="margin-top:6px"></p>`}
-          ${card.reply ? `<div class="row" style="margin-top:14px;align-items:flex-start">
-            <button class="play sm" id="rv-reply" style="--c:var(--ink)" aria-label="播放回应">${ICON.play}</button>
-            <div><div class="small muted">对方可能这样回</div><div style="font-weight:600">${esc(card.reply)}${emoTag(card.reply, "sm")}</div></div></div>` : ""}
+          ${type === "listen" || card.scene === "vocab" ? zhTap(card.zh) : ""}
+          ${type === "speak" ? `<p class="small" id="rv-cmp" style="margin-top:6px"></p>` : ""}
+          ${replyHTML(card.reply, "rv-reply")}
           ${type === "listen" ? `<div class="row" style="margin-top:14px">
             <button class="btn soft sm" id="rv-shadow">${ICON.mic}<span>跟读</span></button>
             <span class="small muted grow" id="rv-shadow-res"></span></div>
@@ -249,11 +260,9 @@ Views.review = {
     const bindAudio = () => {
       $("#rv-play").onclick = () => playWith(play(), card.en);
       $("#rv-slow").onclick = () => playWith(play(), card.en, Math.max(0.5, Settings.get("speed") - 0.3));
-      $("#rv-chunks").onclick = async () => { play().classList.add("speaking"); await Speech.chunks(card.chunks, Math.max(0.6, Settings.get("speed") - 0.1)); play() && play().classList.remove("speaking"); };
     };
     bindAudio();
     $("#rv-reveal").onclick = () => this.reveal(card, type);
-    const zh = $("#rv-zh"); if(zh) zh.onclick = e => e.currentTarget.classList.toggle("show");
     const rp = $("#rv-reply"); if(rp) rp.onclick = () => playWith(rp, card.reply, null, true);
     const sh = $("#rv-shadow"); if(sh) sh.onclick = () => this.shadow(card);
     const say = $("#rv-say"); if(say) say.onclick = () => this.sayIt(card);
@@ -725,8 +734,8 @@ Views.listen = {
         <div class="row" style="justify-content:center">${bulletHTML(it.scene, true)}</div>
         <div class="en hf-en${h.showText ? "" : " blur"}" id="hf-en">${renderEn(it.chunks)}</div>
         ${h.showText && emoTag(it.en) ? `<p style="text-align:center;margin-top:6px">${emoTag(it.en)}</p>` : ""}
-        <p class="zh blur" id="hf-zh">${esc(it.zh || "")}</p>
-        ${h.reply && it.reply ? `<p class="hf-reply${h.showText ? "" : " blur"}">${esc(it.reply)}${h.showText ? emoTag(it.reply, "sm") : ""}</p>` : ""}
+        ${zhTap(it.zh)}
+        ${h.reply && it.reply ? `<p class="hf-reply${h.showText ? "" : " blur"}">${esc(it.reply)}${h.showText ? emoTag(it.reply, "sm") : ""}</p>${zhTap(REPLY_ZH[it.reply])}` : ""}
       </div>
       <div class="row" style="justify-content:center;gap:18px">
         <button class="icon-btn" id="hf-prev" aria-label="上一句"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
@@ -748,7 +757,6 @@ Views.listen = {
     $$("[data-reps]").forEach(b => b.onclick = () => { h.reps = +b.dataset.reps; $$("[data-reps]").forEach(x => x.classList.toggle("on", x === b)); });
     $("#hf-reply").onclick = () => { h.reply = !h.reply; this.renderHF(); };
     $("#hf-text").onclick = () => { h.showText = !h.showText; this.renderHF(); };
-    $("#hf-zh").onclick = e => e.currentTarget.classList.toggle("show");
     $("#hf-en").onclick = e => e.currentTarget.classList.remove("blur");
   },
   jumpHF(d){
@@ -820,7 +828,7 @@ Views.speak = {
     $("#v-speak").innerHTML = `
       <div class="row" style="margin-bottom:14px"><button class="icon-btn" id="sp-back" aria-label="返回话题">${ICON.back}</button>${bulletHTML(t.scene)}<h2 style="margin:0">${esc(t.title)}</h2></div>
       <p class="brief">${esc(t.brief)}</p>
-      ${t.hints && t.hints.length ? `<div class="chips" style="margin-top:12px">${t.hints.map(h => `<button class="chip" data-say="${esc(h)}">${esc(h)}</button>`).join("")}</div>` : ""}
+      ${t.hints && t.hints.length ? `<div class="chips" style="margin-top:12px">${seededShuffle(t.hints, "hints" + t.title).map(h => `<button class="chip" data-say="${esc(h)}">${esc(h)}</button>`).join("")}</div>` : ""}
       <div class="thread" id="sp-thread"></div>
       <div class="composer">
         <div class="row" style="align-items:flex-end">
@@ -943,7 +951,8 @@ Object.assign(Views.speak, {
   },
   renderList(){
     const td = topicOfDay(), t = TOPICS[td];
-    const list = TOPICS.map((x, k) => [x, k]).filter(([x]) => Speak.cat === "all" || x.cat === Speak.cat);
+    // 话题顺序每次打开都随机
+    const list = seededShuffle(TOPICS.map((x, k) => [x, k]), "topics").filter(([x]) => Speak.cat === "all" || x.cat === Speak.cat);
     $("#v-speak").innerHTML = `
       <h1>口语</h1>
       <p class="muted" style="margin:8px 0 18px">选一个场景，用英语说出来。说不出来的地方可以夹中文，AI 会改成美国人日常的说法，再陪你接着聊下去。</p>
@@ -1023,7 +1032,7 @@ Object.assign(Views.speak, {
       <p style="text-align:center;font-weight:700;margin-top:10px">对方说了一句，用英语回应他</p>
       <button class="play" id="rf-play" style="--c:var(--ink)" aria-label="播放">${ICON.play}</button>
       <div class="row" style="justify-content:center;gap:8px"><button class="chip" id="rf-again">再听一遍</button><button class="chip" id="rf-show">看原句</button></div>
-      <p class="en" id="rf-line" hidden style="font-size:19px;text-align:center;margin-top:10px">${renderEn(it.chunks)}</p>
+      <div id="rf-line" hidden style="text-align:center;margin-top:10px"><p class="en" style="font-size:19px">${renderEn(it.chunks)}</p>${zhTap(it.zh)}</div>
       <div class="row" style="justify-content:center;margin-top:20px"><button class="mic lg" id="rf-mic" aria-label="开始回答">${ICON.mic}</button></div>
       <p id="rf-said" style="text-align:center;font-weight:600;min-height:24px;margin-top:10px"></p>
       <p class="small muted" style="text-align:center" id="rf-tip">听完点麦克风，直接说。不用完美，先开口。</p>
@@ -1060,7 +1069,7 @@ Object.assign(Views.speak, {
     $("#rf-res").innerHTML = `
       <div class="panel" style="margin-top:14px">
         <div class="small muted">参考回答${R.rt !== null ? `，你的反应时间 ${R.rt.toFixed(1)} 秒` : ""}</div>
-        <div class="row" style="align-items:flex-start;margin-top:6px"><button class="play sm" id="rf-ans" style="--c:var(--green)" aria-label="播放">${ICON.play}</button><div class="say grow" style="font-weight:700;font-size:18px">${esc(it.reply)}</div></div>
+        <div class="row" style="align-items:flex-start;margin-top:6px"><button class="play sm" id="rf-ans" style="--c:var(--green)" aria-label="播放">${ICON.play}</button><div class="grow"><div class="say" style="font-weight:700;font-size:18px">${esc(it.reply)}</div>${zhTap(REPLY_ZH[it.reply], "sm")}</div></div>
         <p class="small muted" style="margin-top:8px">对方说的是：${esc(it.en)}（${esc(it.zh)}）</p>
         ${R.said ? fixPanel(R.said) : ""}${R.said && hasKey ? `<button class="link" id="rf-ai" style="margin-top:10px">让 AI 把我的回答改得更地道</button>` : ""}
       </div>
@@ -1089,7 +1098,7 @@ Object.assign(Views.speak, {
 });
 
 /* ================= 连读 ================= */
-const Link = { tokens: [], links: [], text: LINK_PRESETS[0], recorder: null, stream: null, chunks: [], recDone: null, recogDone: null, recording: false, recTimer: null };
+const Link = { tokens: [], links: [], text: seededShuffle(ALL_ITEMS.filter(i => i.en.split(" ").length <= 12), "link")[0].en, recorder: null, stream: null, chunks: [], recDone: null, recogDone: null, recording: false, recTimer: null };
 Views.link = {
   show(){
     neuralSoon();
@@ -1100,6 +1109,7 @@ Views.link = {
       <textarea id="lk-input" rows="2" spellcheck="false" style="margin-top:10px;min-height:60px" aria-label="练习句子">${esc(Link.text)}</textarea>
       <div class="panel" style="margin-top:14px">
         <div class="lk-sent" id="lk-display"></div>
+        <div id="lk-zh"></div>
         <div class="lk-legend" style="margin:6px 0 10px"><span class="c-cv">辅元连读</span><span class="c-vv">元音过渡</span><span class="c-as">音的同化</span><span class="c-lp">失去爆破或合并</span><span class="c-hd">h 弱读</span></div>
         <ul class="links" id="lk-list"></ul>
       </div>
@@ -1170,7 +1180,8 @@ Views.link = {
     Link.tokens = tokenize(Link.text);
     Link.links = detectLinks(Link.tokens);
     const byI = new Map(Link.links.map(l => [l.i, l]));
-    $("#lk-display").innerHTML = Link.tokens.map((t, i) => `<span class="w">${esc(t.raw)}</span>` + (i < Link.tokens.length - 1 ? (byI.get(i) ? `<span class="lk c-${byI.get(i).cls}">‿</span>` : " ") : "")).join("") || `<span class="muted">输入一句英文</span>`;
+    $("#lk-display").innerHTML = Link.tokens.map((t, i) => `<span class="w">${esc(t.raw)}</span>` + (i < Link.tokens.length - 1 ? (byI.get(i) ? `<span class="lk c-${byI.get(i).cls}">‿</span><wbr>` : " ") : "")).join("") || `<span class="muted">输入一句英文</span>`;
+    { const z = $("#lk-zh"); if(z) z.innerHTML = zhTap(zhOf(Link.text)); }
     $("#lk-list").innerHTML = Link.links.length ? Link.links.map((l, k) => `
       <li><div class="pair c-${l.cls}">${esc(l.a)}‿${esc(l.b)}</div>
       <div class="grow"><div class="kind c-${l.cls}">${esc(l.kind)}</div><div class="hint">读作 <b>${esc(l.hint)}</b>。${esc(l.note)}</div></div>
@@ -1324,7 +1335,7 @@ Views.me = {
       <h1>我的 <span class="small muted" style="font-weight:500">版本 ${APP_VERSION}</span></h1>
       <h3>跟读识别 <span class="small muted">麦克风</span></h3>
       <div class="panel" id="stt-box"></div>
-      <h3>发音打分 <span class="small muted">微软 Azure</span></h3>
+      <h3>发音打分 <span class="small muted">讯飞 / 微软</span></h3>
       <div class="panel" id="pron-box"></div>
       <h3>声音检查</h3>
       <div class="panel" id="me-diag"></div>
@@ -1435,7 +1446,7 @@ Views.words = {
         <div class="grow">
           <div class="row" style="gap:8px;flex-wrap:wrap"><b class="word">${esc(v.w)}</b>${lvBadge(v.l)}${v.hand ? `<span class="tag-hand">口语精选</span>` : ""}</div>
           <div class="small muted">${esc(v.pos)}，${esc(v.zh.replace(/^[a-z]+\.\s*/, ""))}</div>
-          ${v.ex ? `<div class="ex">${esc(v.ex)}</div>` : ""}
+          ${v.ex ? `<div class="ex">${esc(v.ex)}</div>${zhTap(EX_ZH[v.ex], "sm")}` : ""}
         </div>
         ${s[v.id] ? `<span class="small muted">复习中</span>` : `<button class="icon-btn" data-wadd="${v.id}" aria-label="加入复习">${ICON.plus}</button>`}
       </div>`;
@@ -1677,33 +1688,59 @@ Views.me.renderAI = function(){
 /* ================= 发音打分设置 ================= */
 Views.me.renderPron = function(){
   const box = $("#pron-box"); if(!box) return;
-  const key = Settings.get("azureKey"), reg = Settings.get("azureRegion");
+  const prov = Pron.provider();
+  const xf = prov === "xfyun";
+  const ready = Pron.ready();
+  const status = ready ? (xf ? `<span class="ok">已填好讯飞密钥</span>。跟读、看中文说英文、口语、连读录完音后会自动打分。今天用了 ${Pron.usedToday()} 次（新用户每天免费 500 次）。`
+      : `<span class="ok">已填好 Azure 密钥</span>。录完音后会自动打分。本月大约用了 ${Pron.usedMin()} 分钟（免费 300 分钟）。`)
+    : "填上密钥后，每次读完都会给总分、准确、流利、完整的分数，每个词、每个音节单独打分，还会指出漏读、多读和读错的词。";
   box.innerHTML = `
-    <p class="small">${key ? `<span class="ok">已填好 Azure 密钥</span>。跟读、看中文说英文、口语、连读录完音后会自动打分。本月大约用了 ${Pron.usedMin()} 分钟（免费 300 分钟）。` : "填上微软 Azure 的密钥后，每次读完都会给总分、准确、流利、完整、语调的分数，每个词、每个音单独打分，还会告诉你把哪个音读成了什么。免费档每月 5 小时，自己练完全够用。"}</p>
+    <p class="small">${status}</p>
+    <div class="chips" style="margin-top:10px" id="pr-prov">
+      <button class="chip${xf ? " on" : ""}" data-prov="xfyun">讯飞（推荐，国内直连）</button>
+      <button class="chip${xf ? "" : " on"}" data-prov="azure">微软 Azure</button>
+    </div>
+    ${xf ? `
+    <div class="field" style="margin-top:10px"><label for="pr-appid">APPID</label>
+      <input type="text" id="pr-appid" placeholder="8 位字母数字，比如 1a2b3c4d" autocomplete="off" value="${esc(Settings.get("xfAppId"))}"></div>
+    <div class="field"><label for="pr-xsecret">APISecret</label>
+      <input type="password" id="pr-xsecret" placeholder="32 位字母数字" autocomplete="off" value="${esc(Settings.get("xfSecret"))}"></div>
+    <div class="field"><label for="pr-xkey">APIKey</label>
+      <input type="password" id="pr-xkey" placeholder="32 位字母数字" autocomplete="off" value="${esc(Settings.get("xfKey"))}"></div>` : `
     <div class="field" style="margin-top:10px"><label for="pr-key">Azure 语音密钥</label>
-      <input type="password" id="pr-key" placeholder="一串 32 位或更长的字母数字" autocomplete="off" value="${esc(key)}"></div>
+      <input type="password" id="pr-key" placeholder="一串 32 位或更长的字母数字" autocomplete="off" value="${esc(Settings.get("azureKey"))}"></div>
     <div class="field"><label for="pr-reg">区域 <span class="small muted">要和创建资源时选的一样</span></label>
-      <select id="pr-reg">${AZURE_REGIONS.map(([k, n]) => `<option value="${k}"${k === reg ? " selected" : ""}>${n}（${k}）</option>`).join("")}</select></div>
+      <select id="pr-reg">${AZURE_REGIONS.map(([k, n]) => `<option value="${k}"${k === Settings.get("azureRegion") ? " selected" : ""}>${n}（${k}）</option>`).join("")}</select></div>`}
     <div class="row wrap" style="gap:8px"><button class="btn ghost sm" id="pr-test">${ICON.mic}<span>读一句试试</span></button></div>
     <p class="small" id="pr-res" style="margin-top:8px"></p>
     <div id="pr-out"></div>
-    <details class="small" style="margin-top:10px"><summary class="link">怎么申请免费的 Azure 密钥（约 10 分钟）</summary>
+    ${xf ? `<details class="small" style="margin-top:10px"${ready ? "" : " open"}><summary class="link">怎么申请讯飞的密钥（约 5 分钟，不用信用卡、不用 VPN）</summary>
       <ol style="padding-left:20px;margin:8px 0;line-height:1.7">
-        <li>打开 azure.microsoft.com（国际版，不是世纪互联的 azure.cn），点「免费试用」，用微软账号登录（没有就注册一个）。注册要手机号验证，还要绑一张 Visa 或万事达卡验证身份，免费档不会扣钱。</li>
-        <li>登录 portal.azure.com，在顶部搜索框搜「语音服务」（Speech services），点「创建」。</li>
-        <li>「订阅」选默认的；「资源组」点「新建」随便起个名；「区域」选 East Asia（香港）或 Japan East；「名称」随便填；<b>「定价层」一定选 Free F0</b>。</li>
-        <li>点「查看 + 创建」→「创建」，等一分钟部署完成，点「转到资源」。</li>
-        <li>左边菜单点「密钥和终结点」，复制「密钥 1」粘贴到上面，「区域」选和第 3 步一样的。</li>
-        <li><b>30 天后要「升级」一次</b>：免费试用账号满 30 天会被停用，密钥跟着失效（打分会报 401/403）。收到提醒或失效时，在 portal.azure.com 的「订阅」里点「升级」改成「即用即付」。F0 免费档升级后也不收钱，超出 5 小时只是当月停用。</li>
+        <li>手机浏览器打开 <b>xfyun.cn</b>（讯飞开放平台），右上角「注册」，用手机号注册并登录。</li>
+        <li>点右上角「控制台」，再点「创建新应用」：名称随便填（比如「每日美语」），分类随便选，提交。</li>
+        <li>点进刚建好的应用，在左边的能力列表里找到<b>「语音评测」→「语音评测（流式版）」</b>。</li>
+        <li>页面右边「服务接口认证信息」里有 <b>APPID、APISecret、APIKey</b> 三项，分别复制，粘贴到上面对应的框里。</li>
+        <li>点「读一句试试」，出分数就好了。新用户默认每天免费 500 次；在讯飞「账户 → 实名认证」做个人认证后，还能在这个页面领一年 1 万次的免费礼包。</li>
       </ol>
-      <span class="muted">国内网络打开 Azure 网站和打分时都建议开 VPN。密钥只保存在这台手机上。</span>
-    </details>`;
-  $("#pr-key").onchange = e => { Settings.set("azureKey", e.target.value.trim()); toast(e.target.value.trim() ? "密钥已保存" : "已清除密钥"); this.renderPron(); };
-  $("#pr-reg").onchange = e => { Settings.set("azureRegion", e.target.value); toast("区域已保存"); };
+      <span class="muted">密钥只保存在这台手机上。</span>
+    </details>` : `<details class="small" style="margin-top:10px"><summary class="link">怎么申请 Azure 密钥（要 Visa/万事达信用卡）</summary>
+      <ol style="padding-left:20px;margin:8px 0;line-height:1.7">
+        <li>打开 azure.microsoft.com（国际版，不是世纪互联的 azure.cn），注册微软账号，要手机号和 Visa 或万事达信用卡验证。</li>
+        <li>portal.azure.com 搜「语音服务」→「创建」，区域选 East Asia，<b>定价层选 Free F0</b>。</li>
+        <li>建好后「密钥和终结点」里复制「密钥 1」粘贴到上面，「区域」选一样的。</li>
+        <li>免费试用账号满 30 天要在「订阅」里升级成「即用即付」，否则密钥失效；F0 免费档不收钱。</li>
+      </ol>
+      <span class="muted">国内网络打开 Azure 和打分都建议开 VPN。</span>
+    </details>`}`;
+  $$("#pr-prov [data-prov]").forEach(b => b.onclick = () => { Settings.set("pronProvider", b.dataset.prov); this.renderPron(); });
+  const save = (id, key, msg) => { const el = $(id); if(el) el.onchange = e => { Settings.set(key, e.target.value.trim()); toast(e.target.value.trim() ? msg : "已清除"); this.renderPron(); }; };
+  save("#pr-appid", "xfAppId", "APPID 已保存"); save("#pr-xsecret", "xfSecret", "APISecret 已保存"); save("#pr-xkey", "xfKey", "APIKey 已保存");
+  save("#pr-key", "azureKey", "密钥已保存");
+  const reg = $("#pr-reg"); if(reg) reg.onchange = e => { Settings.set("azureRegion", e.target.value); toast("区域已保存"); };
   $("#pr-test").onclick = async () => {
-    Settings.set("azureKey", $("#pr-key").value.trim());
+    [["#pr-appid", "xfAppId"], ["#pr-xsecret", "xfSecret"], ["#pr-xkey", "xfKey"], ["#pr-key", "azureKey"]].forEach(([id, k]) => { const el = $(id); if(el) Settings.set(k, el.value.trim()); });
     const res = $("#pr-res"), out = $("#pr-out");
-    if(!Pron.ready()){ res.textContent = "先填密钥"; return; }
+    if(!Pron.ready()){ res.textContent = xf ? "先把 APPID、APISecret、APIKey 三项都填上" : "先填密钥"; return; }
     if(activeListen){ stopActiveListen(); return; }
     Speech.stop();
     const ref = "Nice to meet you. How was your weekend?";
@@ -1713,7 +1750,7 @@ Views.me.renderPron = function(){
     if(!r.audio){ res.textContent = "没录到声音：" + srErrorText(r.error) + (r.error === "switched" ? "" : "（发音打分要用「手机上识别」录音）"); return; }
     res.innerHTML = `请读：<b>${ref}</b>`;
     const ev = await evaluateSpeech(out, r, { ref });
-    if(ev && ev.pron) res.innerHTML = `<span class="ok">Azure 打分正常</span>`;
+    if(ev && ev.pron) res.innerHTML = `<span class="ok">${Pron.name()}打分正常</span>`;
   };
 };
 

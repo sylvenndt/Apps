@@ -1,7 +1,8 @@
 "use strict";
 /* 读完之后的评价：
-   ① 发音打分：微软 Azure 发音评测。拿录音和「应该读的句子」对比，给总分、准确、流利、完整、语调，
-      每个词、每个音都有分数，还能听出你把哪个音读成了什么。免费档每月 5 小时。
+   ① 发音打分：默认用讯飞「语音评测（流式版）」（国内直连，不用信用卡，新用户每天免费 500 次）；
+      也可以换成微软 Azure 发音评测。拿录音和「应该读的句子」对比，给总分、准确、流利、完整，
+      每个词、每个音节都有分数，指出漏读、多读、读错的地方。
    ② 语法纠错：用「我的 → AI 批改」里选的 DeepSeek 或 Claude，改语法、换更地道的说法。 */
 const AZURE_REGIONS = [
   ["eastasia", "东亚（香港）"], ["japaneast", "日本东部"], ["southeastasia", "东南亚（新加坡）"],
@@ -15,18 +16,27 @@ const b64utf8 = s => btoa(unescape(encodeURIComponent(s)));
 const paOf = o => (o && o.PronunciationAssessment) || o || {};
 const monthKey = () => "azureSec:" + dayKey().slice(0, 7);
 
+const xfDayKey = () => "xfCalls:" + dayKey();
 const Pron = {
-  ready(){ return !!Settings.get("azureKey"); },
+  provider(){ return Settings.get("pronProvider") === "azure" ? "azure" : "xfyun"; },
+  name(){ return this.provider() === "azure" ? "微软 Azure" : "讯飞"; },
+  ready(){ return this.provider() === "azure" ? !!Settings.get("azureKey") : !!(Settings.get("xfAppId") && Settings.get("xfKey") && Settings.get("xfSecret")); },
   usedMin(){ return Math.round((store.get(monthKey(), 0) || 0) / 60); },
+  usedToday(){ return store.get(xfDayKey(), 0) || 0; },
   params(ref){
     return { ReferenceText: ref, GradingSystem: "HundredMark", Granularity: "Phoneme", Dimension: "Comprehensive",
       EnableMiscue: true, EnableProsodyAssessment: true, PhonemeAlphabet: "IPA", NBestPhonemeCount: 3 };
   },
   /* wav：16kHz 单声道 WAV；ref：应该读的句子 */
   async assess(wav, ref, seconds){
-    if(!this.ready()) throw new Error("还没填 Azure 密钥");
+    if(!this.ready()) throw new Error(`还没填${this.name()}的密钥`);
     ref = String(ref || "").trim();
     if(!ref) throw new Error("没有可以对照的句子");
+    if(this.provider() === "xfyun"){
+      const res = await Xfyun.assess(wav, ref);
+      store.set(xfDayKey(), this.usedToday() + 1);
+      return res;
+    }
     let json;
     try{ json = await this.rest(wav, ref); }
     catch(e){
@@ -92,6 +102,133 @@ const Pron = {
     });
   }
 };
+
+/* ---------- 讯飞 语音评测（流式版）WebSocket ----------
+   文档：wss://ise-api.xfyun.cn/v2/open-ise，HMAC-SHA256 签名放在地址里；先发参数（ssb），再分帧发 16k 16 位单声道 PCM，
+   最后一帧 aus=4；服务器回 base64 的 XML。英文分数默认是 5 分制，这里统一换成百分制。 */
+const XF_HOST = "ise-api.xfyun.cn", XF_PATH = "/v2/open-ise";
+const XF_ERR = {
+  10313: "APPID 不对，或者和 APIKey 不是同一个应用的", 11200: "这个应用还没开通「语音评测」，到讯飞控制台的应用里开通一下",
+  11201: "今天的免费次数用完了（每天 500 次），明天再来，或者在讯飞控制台领实名认证礼包", 10114: "评测超时，再试一次",
+  10200: "网络太慢，评测超时了", 68676: "听起来像在乱读，按句子认真读一遍", 48195: "句子格式讯飞不认，换一句试试",
+  40007: "录音格式不对", 10043: "录音格式不对", 68675: "录音格式不对", 10163: "参数不对：", 10160: "请求格式不对", 10139: "参数不对："
+};
+/* 讯飞英文音素（ARPAbet 风格）→ 国际音标，方便沿用下面的发音提示 */
+const XF_PHONE = { aa: "ɑ", ae: "æ", ah: "ʌ", ao: "ɔ", aw: "aʊ", ax: "ə", ay: "aɪ", eh: "ɛ", er: "ɝ", axr: "ɚ", ey: "eɪ", ih: "ɪ", iy: "i", ow: "oʊ", oy: "ɔɪ", uh: "ʊ", uw: "u",
+  b: "b", ch: "tʃ", d: "d", dh: "ð", f: "f", g: "g", hh: "h", jh: "dʒ", k: "k", l: "l", m: "m", n: "n", ng: "ŋ", p: "p", r: "ɹ", s: "s", sh: "ʃ", t: "t", th: "θ", v: "v", w: "w", y: "j", z: "z", zh: "ʒ" };
+const xfPhone = p => XF_PHONE[String(p).toLowerCase().replace(/[0-9]/g, "")] || p;
+const Xfyun = {
+  async url(){
+    const key = Settings.get("xfKey"), secret = Settings.get("xfSecret");
+    const date = new Date().toUTCString();
+    const origin = `host: ${XF_HOST}\ndate: ${date}\nGET ${XF_PATH} HTTP/1.1`;
+    const enc = new TextEncoder();
+    const k = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const sig = await crypto.subtle.sign("HMAC", k, enc.encode(origin));
+    const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sig)));
+    const auth = btoa(`api_key="${key}", algorithm="hmac-sha256", headers="host date request-line", signature="${sigB64}"`);
+    return `wss://${XF_HOST}${XF_PATH}?authorization=${encodeURIComponent(auth)}&date=${encodeURIComponent(date)}&host=${XF_HOST}`;
+  },
+  /* 讯飞只认半角英文：弯引号、破折号等换掉；数字照读 */
+  text(ref){
+    return String(ref).replace(/[’‘]/g, "'").replace(/[“”]/g, '"').replace(/[—–]/g, ", ").replace(/…/g, "...").replace(/[^\x20-\x7E]/g, " ").replace(/\s+/g, " ").trim();
+  },
+  async pcm(wav){
+    const buf = new Uint8Array(await wav.arrayBuffer());
+    // 跳过 WAV 头（找 "data" 块）
+    for(let i = 12; i < Math.min(buf.length - 8, 4096); i++){
+      if(buf[i] === 0x64 && buf[i + 1] === 0x61 && buf[i + 2] === 0x74 && buf[i + 3] === 0x61) return buf.subarray(i + 8);
+    }
+    return buf.subarray(44);
+  },
+  async assess(wav, ref){
+    const [url, pcm] = await Promise.all([this.url(), this.pcm(wav)]);
+    const text = this.text(ref);
+    if(!/[a-z]/i.test(text)) throw new Error("没有可以对照的英文句子");
+    const xml = await new Promise((resolve, reject) => {
+      let ws, done = false, opened = false;
+      const fail = msg => { if(done) return; done = true; clearTimeout(timer); try{ ws.close(); }catch(_){} reject(new Error(msg)); };
+      const timer = setTimeout(() => fail(opened ? "讯飞评测超时了，再试一次" : "连不上讯飞的服务器"), 25000);
+      try{ ws = new WebSocket(url); }catch(e){ fail("连不上讯飞的服务器"); return; }
+      const b64 = u8 => { let s = ""; for(let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
+      ws.onopen = async () => {
+        opened = true;
+        ws.send(JSON.stringify({
+          common: { app_id: Settings.get("xfAppId") },
+          business: { sub: "ise", ent: "en_vip", category: "read_sentence", cmd: "ssb", text: "\uFEFF[content]\n" + text, tte: "utf-8", ttp_skip: true,
+            aue: "raw", auf: "audio/L16;rate=16000", rstcd: "utf8", rst: "entirety", ise_unite: "1", plev: "0", extra_ability: "multi_dimension" },
+          data: { status: 0 }
+        }));
+        // 每帧最多 0.25 秒声音（讯飞上限 19200 字节）；至少分两帧，第一帧 aus=1，最后一帧 aus=4
+        const FR = 8000, frames = [];
+        for(let i = 0; i < pcm.length; i += FR) frames.push(pcm.subarray(i, i + FR));
+        if(frames.length < 2){ const h = (pcm.length >> 2) << 1; frames.splice(0, frames.length, pcm.subarray(0, h), pcm.subarray(h)); }
+        for(let n = 0; n < frames.length; n++){
+          if(done || ws.readyState !== 1) return;
+          const last = n === frames.length - 1;
+          ws.send(JSON.stringify({ business: { cmd: "auw", aus: n === 0 ? 1 : last ? 4 : 2 }, data: { status: last ? 2 : 1, data: b64(frames[n]) } }));
+          if(!last) await new Promise(r => setTimeout(r, 15));
+        }
+      };
+      ws.onmessage = e => {
+        let j; try{ j = JSON.parse(e.data); }catch(_){ return; }
+        if(j.code){ fail((XF_ERR[j.code] ? XF_ERR[j.code] + (/：$/.test(XF_ERR[j.code]) ? j.message : "") : `讯飞返回错误 ${j.code}：${j.message || ""}`)); return; }
+        if(j.data && j.data.status === 2 && j.data.data){
+          done = true; clearTimeout(timer);
+          try{ ws.close(1000); }catch(_){}
+          const bin = atob(j.data.data), u = new Uint8Array(bin.length);
+          for(let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+          resolve(new TextDecoder("utf-8").decode(u));
+        }
+      };
+      ws.onerror = () => fail(opened ? "和讯飞的连接断了，再试一次" : "讯飞拒绝了连接：多半是 APIKey / APISecret 填错了，或者手机时间不准");
+      ws.onclose = () => { if(!done) fail(opened ? "讯飞没返回结果就断开了，再试一次" : "讯飞拒绝了连接：多半是 APIKey / APISecret 填错了，或者手机时间不准"); };
+    });
+    return parseXfyun(xml);
+  }
+};
+
+/* 讯飞英文结果 XML → 和 Azure 一样的格式 */
+function parseXfyun(xml){
+  const doc = new DOMParser().parseFromString(xml, "text/xml");
+  const top = doc.querySelector("rec_paper > *") || [...doc.getElementsByTagName("*")].find(e => e.hasAttribute("total_score"));
+  if(!top) throw new Error("讯飞返回的结果看不懂");
+  const ex = top.getAttribute("except_info");
+  if(top.getAttribute("is_rejected") === "true" || ex === "28676"){ const e = new Error("讯飞判断像在乱读，按句子认真读一遍"); e.nomatch = true; throw e; }
+  if(ex === "28673"){ const e = new Error("没录到声音，或者声音太小，靠近麦克风再读一遍"); e.nomatch = true; throw e; }
+  const num = (el, a) => { const v = el && el.getAttribute(a); return v == null || v === "" ? null : +v; };
+  const raw = { total: num(top, "total_score"), acc: num(top, "accuracy_score"), flu: num(top, "fluency_score"), comp: num(top, "integrity_score"), std: num(top, "standard_score") };
+  // 英文默认 5 分制；有任何一项超过 5 就是百分制了
+  const five = Object.values(raw).every(v => v == null || v <= 5.0001);
+  const sc = v => v == null || isNaN(v) ? null : Math.max(0, Math.min(100, Math.round(five ? v * 20 : v)));
+  const SIL = /^(sil|silv|fil)$/i;
+  const words = [...top.getElementsByTagName("word")].filter(w => !SIL.test(w.getAttribute("content") || "")).map(w => {
+    const dp = +(w.getAttribute("dp_message") || 0);
+    const wAcc = sc(num(w, "total_score")) ?? 0;
+    const phon = [];
+    [...w.getElementsByTagName("syll")].forEach(sy => {
+      if(SIL.test(sy.getAttribute("content") || "")) return;
+      const syScore = sc(num(sy, "syll_score"));
+      const serr = +(sy.getAttribute("serr_msg") || 0);
+      const phs = [...sy.getElementsByTagName("phone")].filter(ph => !SIL.test(ph.getAttribute("content") || ""));
+      const bad = ph => +(ph.getAttribute("perr_msg") || 0) || +(ph.getAttribute("dp_message") || 0);
+      // 讯飞指出了具体哪个音错：只标那个音；没指出就整个音节一起算
+      const pinpoint = phs.some(bad);
+      phs.forEach(ph => {
+        const pdp = +(ph.getAttribute("dp_message") || 0), perr = +(ph.getAttribute("perr_msg") || 0);
+        let acc = syScore ?? wAcc;
+        if(pinpoint && !pdp && !perr) acc = Math.max(acc, 70);
+        else if(serr === 1 || serr === 2049) acc = Math.min(acc, 55);
+        if(perr) acc = Math.min(acc, 45);
+        if(pdp === 16) acc = 0; else if(pdp) acc = Math.min(acc, 40);
+        phon.push({ p: xfPhone(ph.getAttribute("content")), acc, heard: "" });
+      });
+    });
+    return { w: w.getAttribute("content") || "", acc: dp === 16 ? 0 : wAcc, err: dp === 16 ? "Omission" : dp === 32 ? "Insertion" : dp === 128 ? "Mispronunciation" : "None",
+      brk: "", mono: false, phon };
+  });
+  return { total: sc(raw.total), acc: sc(raw.acc), flu: sc(raw.flu), comp: sc(raw.comp), pros: null, text: top.getAttribute("content") || "", words };
+}
 
 /* 把 Azure 两种接口返回的格式统一成一种 */
 function normalizePron(j){
@@ -261,7 +398,7 @@ async function evaluateSpeech(box, rec, { ref, zh, model, grammar = false, compa
   const canFix = grammar && AI.ready() && rec && rec.text;
   if(!canPron && !canFix){
     if(rec && rec.audio && !Pron.ready()){
-      box.innerHTML = `<p class="small muted" style="margin-top:8px">想要逐词逐音的发音打分？到「我的 → 发音打分」填上免费的 Azure 密钥。</p>`;
+      box.innerHTML = `<p class="small muted" style="margin-top:8px">想要逐词逐音的发音打分？到「我的 → 发音打分」填上讯飞的密钥（免费，国内直连）。</p>`;
     }
     return;
   }

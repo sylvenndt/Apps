@@ -1,5 +1,5 @@
 "use strict";
-const APP_VERSION = 44; // 跟 index.html 的 ?v= 和 sw.js 的版本一起改
+const APP_VERSION = 45; // 跟 index.html 的 ?v= 和 sw.js 的版本一起改
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -25,7 +25,7 @@ const store = {
 window.addEventListener("storage", e => { if(e.key && e.key.startsWith("fluent:")) store._c.delete(e.key.slice(7)); });
 
 const Settings = {
-  defaults: { speed: 0.9, voice: "", reactSec: 8, engine: "neural", cast: "scene", accent: "both", voice1: "af_heart", voice2: "am_michael", apiKey: "", model: "claude-sonnet-5-5", srEngine: "auto", sttModel: "large", azureKey: "", azureRegion: "eastasia", aiProvider: "deepseek", dsKey: "", dsModel: "deepseek-flash", dsBase: "", keepAudio: true, reviewMode: "listen", focus: [], newPerDay: 10, newWordsPerDay: 15, mix: { scenes: true, vocab: true, pattern: true }, startLevel: "B1" },
+  defaults: { speed: 0.9, voice: "", reactSec: 8, engine: "neural", cast: "scene", accent: "both", voice1: "af_heart", voice2: "am_michael", apiKey: "", model: "claude-sonnet-5-5", srEngine: "auto", sttModel: "large", azureKey: "", azureRegion: "eastasia", pronProvider: "xfyun", xfAppId: "", xfKey: "", xfSecret: "", aiProvider: "deepseek", dsKey: "", dsModel: "deepseek-flash", dsBase: "", keepAudio: true, reviewMode: "listen", focus: [], newPerDay: 10, newWordsPerDay: 15, mix: { scenes: true, vocab: true, pattern: true }, startLevel: "B1" },
   get(k){ const s = store.get("settings", {}); return k in s ? s[k] : this.defaults[k]; },
   set(k, v){ const s = store.get("settings", {}); s[k] = v; store.set("settings", s); }
 };
@@ -83,6 +83,17 @@ const Cards = {
   }
 };
 
+/* 每次打开 App 换一批随机顺序：同一次打开里保持不变（预加载语音和复习队列对得上），关掉重开就重新洗牌 */
+const SESSION_SEED = (Math.random() * 4294967296) >>> 0;
+function seededShuffle(arr, salt = ""){
+  let h = SESSION_SEED ^ 0x9e3779b9;
+  for(const ch of String(salt)) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0;
+  const rnd = () => { h = (h + 0x6D2B79F5) >>> 0; let t = h; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const a = [...arr];
+  for(let i = a.length - 1; i > 0; i--){ const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+
 const SRS = {
   all(){ return store.get("srs", {}); },
   schedule(id, due){
@@ -101,7 +112,8 @@ const SRS = {
   },
   dueIds(){
     const s = this.all(), end = endOfToday();
-    return Object.entries(s).filter(([id, c]) => c.due <= end && Cards.get(id)).sort((a, b) => a[1].due - b[1].due).map(([id]) => id);
+    // 该复习的一个不少，只是顺序每次打开都不一样
+    return seededShuffle(Object.entries(s).filter(([id, c]) => c.due <= end && Cards.get(id)).map(([id]) => id), "due");
   },
   newIds(limit){
     const s = this.all();
@@ -110,29 +122,26 @@ const SRS = {
     const mix = Settings.get("mix"), lv = LEVELS.indexOf(Settings.get("startLevel"));
     const sources = [];
     if(mix.scenes !== false){
+      // 新句随机抽：先从重点场景里抽，不够再从全部场景里抽
       const out = [], focus = Settings.get("focus").filter(k => SCENE_BY_KEY[k] && !SCENE_BY_KEY[k].virtual);
-      const rounds = list => {
-        const maxLen = Math.max(...list.map(x => x.items.length));
-        for(let i = 0; i < maxLen && out.length < room; i++)
-          for(const sc of list){
-            const id = `${sc.key}-${i}`;
-            if(i < sc.items.length && !s[id] && !out.includes(id)) out.push(id);
-            if(out.length >= room) break;
-          }
+      const draw = (list, salt) => {
+        const ids = list.flatMap(sc => sc.items.map((_, i) => `${sc.key}-${i}`)).filter(id => !s[id] && !out.includes(id));
+        for(const id of seededShuffle(ids, salt)){ if(out.length >= room) break; out.push(id); }
       };
-      if(focus.length) rounds(focus.map(k => SCENE_BY_KEY[k]));
-      if(out.length < room) rounds(SCENES.filter(sc => !sc.pack));
+      if(focus.length) draw(focus.map(k => SCENE_BY_KEY[k]), "focus");
+      if(out.length < room) draw(SCENES.filter(sc => !sc.pack), "scenes");
       sources.push(out);
     }
-    const byLevel = list => LEVELS.slice(Math.max(0, lv)).concat(LEVELS.slice(0, Math.max(0, lv))).flatMap(L => list.filter(x => x.level === L));
-    if(mix.pattern !== false) sources.push(byLevel(PATTERN_CARDS).filter(c => !s[c.id]).slice(0, room).map(c => c.id));
+    // 句型、单词：先排当前级别，同一级别里随机
+    const byLevel = (list, salt) => LEVELS.slice(Math.max(0, lv)).concat(LEVELS.slice(0, Math.max(0, lv))).flatMap(L => seededShuffle(list.filter(x => x.level === L), salt + L));
+    if(mix.pattern !== false) sources.push(byLevel(PATTERN_CARDS.filter(c => !s[c.id]), "pat").slice(0, room).map(c => c.id));
     const out = [];
     for(let i = 0; out.length < room && sources.some(x => i < x.length); i++)
       for(const src of sources){ if(i < src.length && out.length < room) out.push(src[i]); }
     if(mix.vocab !== false && wordRoom){
       const order = LEVELS.slice(Math.max(0, lv)).concat(LEVELS.slice(0, Math.max(0, lv)));
       const words = [];
-      for(const L of order){ for(const w of ALL_WORDS){ if(w.l === L && !s[w.id]){ words.push(w.id); if(words.length >= wordRoom) break; } } if(words.length >= wordRoom) break; }
+      for(const L of order){ for(const w of seededShuffle(ALL_WORDS.filter(w => w.l === L && !s[w.id]), "w" + L)){ words.push(w.id); if(words.length >= wordRoom) break; } if(words.length >= wordRoom) break; }
       // 单词和句子交错排列，避免连续一长串单词
       const merged = []; let a = 0, b = 0;
       while(a < out.length || b < words.length){ if(a < out.length) merged.push(out[a++]); if(b < words.length) merged.push(words[b++]); if(b < words.length) merged.push(words[b++]); }

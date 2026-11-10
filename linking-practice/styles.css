@@ -102,7 +102,7 @@ p{margin:0}
 .play.sm.speaking::after{inset:-5px;border-width:2px}
 
 /* 英文句子 */
-.en{font-size:24px;line-height:1.45;font-weight:600;letter-spacing:-.005em}
+.en{font-size:24px;line-height:1.45;font-weight:600;letter-spacing:-.005em;overflow-wrap:break-word}
 .en .ck{white-space:nowrap}
 .en .sep{display:inline-block;width:2px;height:.9em;background:var(--rule);margin:0 .32em;vertical-align:-.1em;border-radius:2px}
 .en .lk{font-weight:800;margin:0 1px}
@@ -400,3 +400,7 @@ a,button,.btn,.chip,.icon-btn,.tabs a,.me-btn,.card,.hf-card,.lib-link,.row[data
 .me-btn.tap{transform:scale(.88)}
 /* 页面顶部那一行（返回、标题、右边的进度）让开右上角浮着的「我的」按钮 */
 .view > .row.between:first-child{padding-right:52px}
+/* 点一下显示的中文 */
+.zh-tap{margin-top:6px;cursor:pointer}
+.zh-tap.sm{font-size:13px;margin-top:3px}
+.lk-sent{overflow-wrap:break-word}
