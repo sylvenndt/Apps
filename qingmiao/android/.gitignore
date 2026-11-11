@@ -1,8 +1,0 @@
-.gradle/
-build/
-local.properties
-*.iml
-.idea/
-.kotlin/
-app/src/main/assets/models/
-app/src/main/assets/core/
